@@ -125,6 +125,7 @@ function JurnalRow({
 
   // Saat user mengisi debet → auto-fill kredit baris ini dengan sisa selisih
   const handleDebetChange = (val: number) => {
+    val = Math.max(0, val)
     onChange(row.id, 'debet', val)
     // Hitung ulang: total debet semua baris (termasuk nilai baru ini)
     const newTotalD = allRows.reduce((s, r) => s + (r.id === row.id ? val : r.debet || 0), 0)
@@ -137,6 +138,7 @@ function JurnalRow({
 
   // Saat user mengisi kredit → auto-fill debet baris ini dengan sisa selisih
   const handleKreditChange = (val: number) => {
+    val = Math.max(0, val)
     onChange(row.id, 'kredit', val)
     const newTotalK = allRows.reduce((s, r) => s + (r.id === row.id ? val : r.kredit || 0), 0)
     const newTotalD = allRows.reduce((s, r) => s + (r.id === row.id ? 0 : r.debet || 0), 0)
@@ -185,7 +187,7 @@ function JurnalRow({
         className="input text-right text-xs font-mono"
         placeholder="0"
         value={row.debet || ''}
-        onChange={e => handleDebetChange(Number(e.target.value) || 0)}
+        onChange={e => handleDebetChange(Math.max(0, Number(e.target.value) || 0))}
       />
 
       {/* Akun Kredit */}
@@ -203,7 +205,7 @@ function JurnalRow({
             ? 'bg-emerald-50 border-emerald-300' : ''}`}
         placeholder="0"
         value={row.kredit || ''}
-        onChange={e => handleKreditChange(Number(e.target.value) || 0)}
+        onChange={e => handleKreditChange(Math.max(0, Number(e.target.value) || 0))}
       />
 
       {/* Hapus baris */}

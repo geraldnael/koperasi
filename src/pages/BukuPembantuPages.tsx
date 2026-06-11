@@ -21,7 +21,7 @@ export function SHUPage() {
                    cfg.pctPengurus + cfg.pctPendidikan + cfg.pctKaryawan + cfg.pctSosial
 
   const set = (k: keyof typeof cfg) => (e: React.ChangeEvent<HTMLInputElement>) =>
-    setCfg(c => ({ ...c, [k]: Number(e.target.value) || 0 }))
+    setCfg(c => ({ ...c, [k]: Math.min(100, Math.max(0, Number(e.target.value) || 0)) }))
 
   const handleSave = () => {
     setSHUConfig(cfg)
@@ -547,7 +547,7 @@ export function PiutangSPPage() {
 
   const saveEdit = (id: number) => {
     if (!editCell || editCell.id !== id) return
-    const val = Number(editCell.val.replace(/[^\d.]/g,'')) || 0
+    const val = Math.max(0, Number(editCell.val.replace(/[^\d.]/g,'')) || 0)
     const sp  = piutangSP.find(p => p.anggotaId === id)
     if (editCell.field === 'pokok') {
       updatePiutangSP(id, val, sp?.saldoAwalJasa ?? 0)
