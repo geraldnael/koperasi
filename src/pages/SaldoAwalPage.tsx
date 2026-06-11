@@ -101,7 +101,7 @@ export default function SaldoAwalPage() {
                   <td className="td pr-2">
                     <input type="number" className="input text-right font-mono"
                       value={local[a.kode] ?? 0}
-                      onChange={e => set(a.kode, Math.max(0, Number(e.target.value) || 0))} />
+                      onChange={e => set(a.kode, Number(e.target.value) || 0)} />
                   </td>
                 </tr>
               ))}
