@@ -114,7 +114,7 @@ export default function SaldoAwalPage() {
 
   const renderAkunRows = (list: Akun[]) =>
     list.map(a => {
-      const isAuto   = kode => autoValues[kode] !== undefined
+      const isAuto   = (kode: string) => autoValues[kode] !== undefined
       const isKontra = isKontraAset(a)
       const isAut    = isAuto(a.kode)
       const val      = merged[a.kode] ?? 0
