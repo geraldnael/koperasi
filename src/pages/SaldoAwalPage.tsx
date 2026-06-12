@@ -8,15 +8,20 @@ import { PageHeader } from '../components/ui'
 import { SALDO_SIMPANAN_MASTER } from '../data/simpanan'
 
 // ── Akun yang otomatis dihitung dari data master (tidak bisa diinput manual) ──
-// Nilainya harus konsisten dengan Buku Pembantu & Posisi Keuangan
+// Sesuai Excel RAT — hanya akun yang murni berasal dari buku pembantu simpanan:
+//   1.1.4  Piutang SP        ← total pokok pinjaman anggota (data Des 2025)
+//   2.1.9  Simpanan Sukarela ← total simpanan sukarela anggota
+//   3.1.1  Simpanan Pokok    ← total simpanan pokok anggota
+//   3.1.2  Simpanan Wajib    ← total simpanan wajib anggota
+//   3.1.5  Simp Wajib Khusus ← total simpanan wajib khusus anggota
+//
+// Akun 1.1.6, 2.1.12, 2.1.14 diisi MANUAL karena ada komponen di luar master anggota aktif
 const AUTO_COMPUTED: Record<string, () => number> = {
-  '1.1.4': () => SALDO_SIMPANAN_MASTER.reduce((s, r) => s + r.pinjaman, 0),        // Piutang SP (pokok)
-  '1.1.6': () => SALDO_SIMPANAN_MASTER.reduce((s, r) => s + (r.saldoAwalJasa ?? 0), 0), // Piutang Jasa SP
-  '3.1.1': () => SALDO_SIMPANAN_MASTER.reduce((s, r) => s + r.pokok, 0),            // Simpanan Pokok
-  '3.1.2': () => SALDO_SIMPANAN_MASTER.reduce((s, r) => s + r.wajib, 0),            // Simpanan Wajib
-  '2.1.9': () => SALDO_SIMPANAN_MASTER.reduce((s, r) => s + r.sukarela, 0),         // Simpanan Sukarela
-  '2.1.10': () => SALDO_SIMPANAN_MASTER.reduce((s, r) => s + r.wajib_khs, 0),       // Simpanan Wajib Khusus
-  '2.1.14': () => SALDO_SIMPANAN_MASTER.reduce((s, r) => s + r.tht, 0),             // Tabungan Hari Tua
+  '1.1.4': () => SALDO_SIMPANAN_MASTER.reduce((s, r) => s + r.pinjaman, 0),
+  '2.1.9': () => SALDO_SIMPANAN_MASTER.reduce((s, r) => s + r.sukarela, 0),
+  '3.1.1': () => SALDO_SIMPANAN_MASTER.reduce((s, r) => s + r.pokok, 0),
+  '3.1.2': () => SALDO_SIMPANAN_MASTER.reduce((s, r) => s + r.wajib, 0),
+  '3.1.5': () => SALDO_SIMPANAN_MASTER.reduce((s, r) => s + r.wajib_khs, 0),
 }
 
 // Hitung semua nilai auto-computed (cached satu kali)
