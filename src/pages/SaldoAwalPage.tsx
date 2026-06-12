@@ -7,24 +7,16 @@ import { useAppStore } from '../store/useAppStore'
 import { PageHeader } from '../components/ui'
 import { SALDO_SIMPANAN_MASTER } from '../data/simpanan'
 
-// ── Akun yang otomatis dihitung dari data master (tidak bisa diinput manual) ──
-// Sesuai Excel RAT — hanya akun yang murni berasal dari buku pembantu simpanan:
-//   1.1.4  Piutang SP        ← total pokok pinjaman anggota (data Des 2025)
-//   2.1.9  Simpanan Sukarela ← total simpanan sukarela anggota
-//   3.1.1  Simpanan Pokok    ← total simpanan pokok anggota
-//   3.1.2  Simpanan Wajib    ← total simpanan wajib anggota
-//   3.1.5  Simp Wajib Khusus ← total simpanan wajib khusus anggota
-//
-// Akun 1.1.6, 2.1.12, 2.1.14 diisi MANUAL karena ada komponen di luar master anggota aktif
+// ── Akun otomatis dari Buku Pembantu — konsisten dengan Posisi Keuangan ──
+// Hanya akun yang MURNI = total per anggota di master simpanan
 const AUTO_COMPUTED: Record<string, () => number> = {
-  '1.1.4': () => SALDO_SIMPANAN_MASTER.reduce((s, r) => s + r.pinjaman, 0),
-  '2.1.9': () => SALDO_SIMPANAN_MASTER.reduce((s, r) => s + r.sukarela, 0),
-  '3.1.1': () => SALDO_SIMPANAN_MASTER.reduce((s, r) => s + r.pokok, 0),
-  '3.1.2': () => SALDO_SIMPANAN_MASTER.reduce((s, r) => s + r.wajib, 0),
-  '3.1.5': () => SALDO_SIMPANAN_MASTER.reduce((s, r) => s + r.wajib_khs, 0),
+  '1.1.4': () => SALDO_SIMPANAN_MASTER.reduce((s, r) => s + r.pinjaman, 0),      // Piutang SP (pokok)
+  '2.1.9': () => SALDO_SIMPANAN_MASTER.reduce((s, r) => s + r.sukarela, 0),      // Simpanan Sukarela
+  '3.1.1': () => SALDO_SIMPANAN_MASTER.reduce((s, r) => s + r.pokok, 0),         // Simpanan Pokok
+  '3.1.2': () => SALDO_SIMPANAN_MASTER.reduce((s, r) => s + r.wajib, 0),         // Simpanan Wajib
+  '3.1.5': () => SALDO_SIMPANAN_MASTER.reduce((s, r) => s + r.wajib_khs, 0),     // Simp Wajib Khusus
 }
 
-// Hitung semua nilai auto-computed (cached satu kali)
 const autoValues: Record<string, number> = {}
 Object.entries(AUTO_COMPUTED).forEach(([kode, fn]) => { autoValues[kode] = fn() })
 
@@ -43,7 +35,6 @@ function getAllCOA(): Akun[] {
 
 const isKontraAset = (a: Akun) => a.grup === 'ASET' && a.tipe === 'K'
 
-// Gabungkan saldo manual + auto-computed → ini yang dipakai untuk kalkulasi & simpan
 function mergeWithAuto(manual: Record<string, number>): Record<string, number> {
   return { ...manual, ...autoValues }
 }
@@ -51,23 +42,19 @@ function mergeWithAuto(manual: Record<string, number>): Record<string, number> {
 export default function SaldoAwalPage() {
   const { saldoAwal, setSaldoAwal } = useAppStore()
 
-  // local hanya menyimpan nilai yang bisa diedit manual (bukan auto-computed)
   const [local, setLocal] = useState<Record<string, number>>(() => {
     const base = { ...saldoAwal }
-    // Hapus auto-computed dari local agar tidak tumpang tindih
     Object.keys(autoValues).forEach(k => delete base[k])
     return base
   })
-
   const [saved, setSaved]   = useState(false)
   const [allCOA, setAllCOA] = useState<Akun[]>(getAllCOA)
 
-  // ── Sync: kalau saldoAwal di store berubah (dari device lain via Supabase), update local ──
+  // Sync dari Supabase realtime (device lain)
   useEffect(() => {
     setLocal(prev => {
       const next = { ...saldoAwal }
       Object.keys(autoValues).forEach(k => delete next[k])
-      // Hanya update jika ada perbedaan (hindari render loop)
       const isDiff = Object.keys(next).some(k => next[k] !== prev[k]) ||
                      Object.keys(prev).some(k => next[k] !== prev[k])
       return isDiff ? next : prev
@@ -81,11 +68,9 @@ export default function SaldoAwalPage() {
     return () => { window.removeEventListener('storage', refresh); clearInterval(interval) }
   }, [])
 
-  const setManual = useCallback((kode: string, val: number) => {
-    setLocal(s => ({ ...s, [kode]: Math.max(0, val) }))
-  }, [])
+  const setManual = useCallback((kode: string, val: number) =>
+    setLocal(s => ({ ...s, [kode]: Math.max(0, val) })), [])
 
-  // Gabungan: manual + auto
   const merged = useMemo(() => mergeWithAuto(local), [local])
 
   const asetAkun      = useMemo(() => allCOA.filter(a => a.grup === 'ASET'), [allCOA])
@@ -110,7 +95,6 @@ export default function SaldoAwalPage() {
   const selisih  = Math.abs(totalAset - totalKewajEkuitas)
   const balanced = selisih < 1
 
-  // Simpan: gabungkan manual + auto ke store → Supabase
   const handleSave = () => {
     setSaldoAwal(merged)
     setSaved(true)
@@ -119,9 +103,8 @@ export default function SaldoAwalPage() {
 
   const renderAkunRows = (list: Akun[]) =>
     list.map(a => {
-      const isAuto   = (kode: string) => autoValues[kode] !== undefined
+      const isAut    = autoValues[a.kode] !== undefined
       const isKontra = isKontraAset(a)
-      const isAut    = isAuto(a.kode)
       const val      = merged[a.kode] ?? 0
       return (
         <tr key={a.kode} className={`hover:bg-slate-50 border-b border-slate-50 ${isAut ? 'bg-sky-50/40' : ''}`}>
@@ -148,6 +131,7 @@ export default function SaldoAwalPage() {
                 className={`input text-right font-mono ${isKontra ? 'border-rose-200 focus:border-rose-400' : ''}`}
                 value={val || ''}
                 placeholder="0"
+                min={0}
                 onChange={e => setManual(a.kode, Number(e.target.value) || 0)}
               />
             )}
@@ -200,57 +184,45 @@ export default function SaldoAwalPage() {
         subtitle="Isi saldo pembuka sesuai Laporan Posisi Keuangan tahun sebelumnya"
       />
 
-      {/* Keterangan akun otomatis */}
       <div className="rounded-lg px-4 py-2 bg-sky-50 border border-sky-200 text-xs text-sky-700 mb-3 flex items-center gap-2">
         <Lock size={12} />
-        <span>Akun berlabel <strong>otomatis</strong> dihitung langsung dari data Buku Pembantu (Simpanan & Piutang SP) — nilainya konsisten dengan menu Posisi Keuangan dan tidak bisa diedit manual.</span>
+        <span>Akun berlabel <strong>otomatis</strong> dihitung dari data Buku Pembantu (Simpanan & Piutang SP) — konsisten dengan Posisi Keuangan dan tidak bisa diedit manual.</span>
       </div>
 
-      {/* Balance indicator */}
       <div className={`rounded-lg px-4 py-3 text-sm mb-5 flex flex-wrap items-center justify-between gap-2 ${
-        balanced
-          ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-          : 'bg-amber-50 text-amber-700 border border-amber-200'
+        balanced ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                 : 'bg-amber-50 text-amber-700 border border-amber-200'
       }`}>
         <span className="font-semibold">{balanced ? '✓ Neraca seimbang' : '⚠ Neraca belum seimbang'}</span>
         <span className="font-mono text-xs flex flex-wrap gap-4">
           <span>Total Aset: <strong>{fmt(totalAset)}</strong></span>
           <span>Kewajiban + Modal: <strong>{fmt(totalKewajEkuitas)}</strong></span>
-          {!balanced && <span className="text-amber-700">Selisih: <strong>{fmt(selisih)}</strong></span>}
+          {!balanced && <span>Selisih: <strong>{fmt(selisih)}</strong></span>}
         </span>
       </div>
 
-      {/* Dua kolom */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
-        {/* Kolom kiri: ASET */}
         <div>
           <SectionTable
             title="ASET"
             colorClass="bg-blue-50 border-blue-100 text-blue-700"
-            list={asetAkun}
-            total={totalAset}
-            totalLabel="Total Aset"
+            list={asetAkun} total={totalAset} totalLabel="Total Aset"
           />
         </div>
-
-        {/* Kolom kanan: KEWAJIBAN + EKUITAS */}
         <div className="space-y-4">
           <SectionTable
             title="KEWAJIBAN"
             colorClass="bg-amber-50 border-amber-100 text-amber-700"
-            list={kewajibanAkun}
-            total={totalKewajiban}
-            totalLabel="Total Kewajiban"
+            list={kewajibanAkun} total={totalKewajiban} totalLabel="Total Kewajiban"
           />
           <SectionTable
             title="EKUITAS / MODAL"
             colorClass="bg-emerald-50 border-emerald-100 text-emerald-700"
-            list={ekuitasAkun}
-            total={totalEkuitas}
-            totalLabel="Total Ekuitas"
+            list={ekuitasAkun} total={totalEkuitas} totalLabel="Total Ekuitas"
           />
           <div className={`rounded-lg px-4 py-3 border-2 flex items-center justify-between text-sm font-semibold ${
-            balanced ? 'border-emerald-300 bg-emerald-50 text-emerald-700' : 'border-amber-300 bg-amber-50 text-amber-700'
+            balanced ? 'border-emerald-300 bg-emerald-50 text-emerald-700'
+                     : 'border-amber-300 bg-amber-50 text-amber-700'
           }`}>
             <span>Total Kewajiban + Modal</span>
             <span className="font-mono">{fmt(totalKewajEkuitas)}</span>
@@ -258,14 +230,13 @@ export default function SaldoAwalPage() {
         </div>
       </div>
 
-      {/* Simpan */}
       <div className="flex items-center gap-3 mt-5">
         <button onClick={handleSave} className="btn btn-primary">
           <Save size={15} /> {saved ? 'Tersimpan ✓' : 'Simpan Saldo Awal'}
         </button>
         {!balanced && (
           <p className="text-xs text-amber-600">
-            Harap seimbangkan Aset dengan Kewajiban + Modal. Selisih: Rp {fmt(selisih)}
+            Seimbangkan Aset = Kewajiban + Modal. Selisih: Rp {fmt(selisih)}
           </p>
         )}
       </div>

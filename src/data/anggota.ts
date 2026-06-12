@@ -1,5 +1,5 @@
-// Data anggota gabungan dari dua Excel per 20 Des 2025
-// Total: 676 anggota
+// Data anggota — sumber: Excel Des 2025 (APLIKASI)
+// Total: 605 anggota
 
 export interface AnggotaMaster {
   no: number
@@ -607,8 +607,8 @@ export const ANGGOTA_MASTER: AnggotaMaster[] = [
   { no: 598, nama: 'Nitarini Suprihatin' },
   { no: 599, nama: 'Gusti Firdaus' },
   { no: 600, nama: 'Niken Cahyanti' },
-  { no: 601, nama: 'dr Friska' },
-  { no: 602, nama: 'Ambar' },
+  { no: 601, nama: 'Siti Rodiyah' },
+  { no: 602, nama: 'Dyah Agus T' },
   { no: 603, nama: 'Rehulina II' },
   { no: 604, nama: 'Uqi Zulfah II' },
   { no: 605, nama: 'Sardi Siahaan' },
