@@ -111,6 +111,14 @@ const defaultSaldoSimpanan: SaldoSimpanan[] = SALDO_SIMPANAN_MASTER.map(s => ({
   tht: s.tht, jasa_tht: s.jasa_tht, pinjaman: s.pinjaman,
 }))
 
+const defaultPiutangSP: PiutangSP[] = SALDO_SIMPANAN_MASTER
+  .filter(s => s.pinjaman > 0 || (s.saldoAwalJasa ?? 0) > 0)
+  .map(s => ({
+    anggotaId:    s.anggotaNo,
+    saldoAwal:    s.pinjaman,
+    saldoAwalJasa: s.saldoAwalJasa ?? 0,
+  }))
+
 // ── Store ─────────────────────────────────────────────────────────────────
 export const useAppStore = create<AppStore>()(
   persist(
@@ -122,7 +130,7 @@ export const useAppStore = create<AppStore>()(
       jurnal:        [],
       nextJurnalId:  1,
       saldoSimpanan: defaultSaldoSimpanan,
-      piutangSP:     [],
+      piutangSP:     defaultPiutangSP,
       saldoToko:     [],
       shuConfig:     defaultSHU,
       syncStatus:    'idle',
@@ -261,7 +269,7 @@ export const useAppStore = create<AppStore>()(
         jurnal: [],
         nextJurnalId: 1,
         saldoSimpanan: defaultSaldoSimpanan,
-        piutangSP: [],
+        piutangSP: defaultPiutangSP,
         saldoToko: [],
         shuConfig: defaultSHU,
         syncStatus: 'idle',
