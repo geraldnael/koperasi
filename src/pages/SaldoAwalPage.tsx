@@ -104,9 +104,9 @@ export default function SaldoAwalPage() {
                 value={val || ''}
                 placeholder="0"
                 min={0}
-                onChange={e => setManual(a.kode, Number(e.target.value) || 0}
+                onChange={e => setManual(a.kode, Number(e.target.value) || 0)}
               />
-            )}
+            }
           </td>
           <td className="td text-right font-mono text-xs pr-3">
             {val ? (
