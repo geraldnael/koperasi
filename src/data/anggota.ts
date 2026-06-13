@@ -1,10 +1,7 @@
-// Data anggota — sumber: Excel Des 2025 (APLIKASI)
-// Total: 605 anggota
+// Data anggota — sumber: Excel 2026 (APLIKASI)
+// Total: 602 anggota
 
-export interface AnggotaMaster {
-  no: number
-  nama: string
-}
+export interface AnggotaMaster { no: number; nama: string }
 
 export const ANGGOTA_MASTER: AnggotaMaster[] = [
   { no: 1, nama: 'Aan Bayu Maryanto' },
@@ -609,7 +606,4 @@ export const ANGGOTA_MASTER: AnggotaMaster[] = [
   { no: 600, nama: 'Niken Cahyanti' },
   { no: 601, nama: 'Siti Rodiyah' },
   { no: 602, nama: 'Dyah Agus T' },
-  { no: 603, nama: 'Rehulina II' },
-  { no: 604, nama: 'Uqi Zulfah II' },
-  { no: 605, nama: 'Sardi Siahaan' },
 ]

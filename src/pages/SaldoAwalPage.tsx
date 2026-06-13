@@ -1,24 +1,13 @@
 import { useMemo, useState, useEffect, useCallback } from 'react'
-import { Save, Lock } from 'lucide-react'
+import { Save } from 'lucide-react'
 import { COA } from '../utils/coa'
 import type { Akun } from '../types'
 import { fmt } from '../utils/accounting'
 import { useAppStore } from '../store/useAppStore'
 import { PageHeader } from '../components/ui'
-import { SALDO_SIMPANAN_MASTER } from '../data/simpanan'
 
 // ── Akun otomatis dari Buku Pembantu — konsisten dengan Posisi Keuangan ──
 // Hanya akun yang MURNI = total per anggota di master simpanan
-const AUTO_COMPUTED: Record<string, () => number> = {
-  '1.1.4': () => SALDO_SIMPANAN_MASTER.reduce((s, r) => s + r.pinjaman, 0),      // Piutang SP (pokok)
-  '2.1.9': () => SALDO_SIMPANAN_MASTER.reduce((s, r) => s + r.sukarela, 0),      // Simpanan Sukarela
-  '3.1.1': () => SALDO_SIMPANAN_MASTER.reduce((s, r) => s + r.pokok, 0),         // Simpanan Pokok
-  '3.1.2': () => SALDO_SIMPANAN_MASTER.reduce((s, r) => s + r.wajib, 0),         // Simpanan Wajib
-  '3.1.5': () => SALDO_SIMPANAN_MASTER.reduce((s, r) => s + r.wajib_khs, 0),     // Simp Wajib Khusus
-}
-
-const autoValues: Record<string, number> = {}
-Object.entries(AUTO_COMPUTED).forEach(([kode, fn]) => { autoValues[kode] = fn() })
 
 function getAllCOA(): Akun[] {
   try {
@@ -35,16 +24,11 @@ function getAllCOA(): Akun[] {
 
 const isKontraAset = (a: Akun) => a.grup === 'ASET' && a.tipe === 'K'
 
-function mergeWithAuto(manual: Record<string, number>): Record<string, number> {
-  return { ...manual, ...autoValues }
-}
-
 export default function SaldoAwalPage() {
   const { saldoAwal, setSaldoAwal } = useAppStore()
 
   const [local, setLocal] = useState<Record<string, number>>(() => {
     const base = { ...saldoAwal }
-    Object.keys(autoValues).forEach(k => delete base[k])
     return base
   })
   const [saved, setSaved]   = useState(false)
@@ -54,7 +38,6 @@ export default function SaldoAwalPage() {
   useEffect(() => {
     setLocal(prev => {
       const next = { ...saldoAwal }
-      Object.keys(autoValues).forEach(k => delete next[k])
       const isDiff = Object.keys(next).some(k => next[k] !== prev[k]) ||
                      Object.keys(prev).some(k => next[k] !== prev[k])
       return isDiff ? next : prev
@@ -71,7 +54,7 @@ export default function SaldoAwalPage() {
   const setManual = useCallback((kode: string, val: number) =>
     setLocal(s => ({ ...s, [kode]: Math.max(0, val) })), [])
 
-  const merged = useMemo(() => mergeWithAuto(local), [local])
+  const merged = local
 
   const asetAkun      = useMemo(() => allCOA.filter(a => a.grup === 'ASET'), [allCOA])
   const kewajibanAkun = useMemo(() => allCOA.filter(a => a.grup === 'KEWAJIBAN'), [allCOA])
@@ -103,42 +86,31 @@ export default function SaldoAwalPage() {
 
   const renderAkunRows = (list: Akun[]) =>
     list.map(a => {
-      const isAut    = autoValues[a.kode] !== undefined
       const isKontra = isKontraAset(a)
       const val      = merged[a.kode] ?? 0
       return (
-        <tr key={a.kode} className={`hover:bg-slate-50 border-b border-slate-50 ${isAut ? 'bg-sky-50/40' : ''}`}>
+        <tr key={a.kode} className={`hover:bg-slate-50 border-b border-slate-50 `}>
           <td className="td font-mono text-xs text-slate-500">{a.kode}</td>
           <td className="td text-sm">
             <span>{a.nama}</span>
             {isKontra && (
               <span className="ml-1.5 text-[9px] font-semibold text-rose-500 bg-rose-50 px-1 py-0.5 rounded">kontra</span>
             )}
-            {isAut && (
-              <span className="ml-1.5 text-[9px] font-semibold text-sky-600 bg-sky-50 px-1 py-0.5 rounded inline-flex items-center gap-0.5">
-                <Lock size={7} />otomatis
-              </span>
-            )}
           </td>
           <td className="td pr-2">
-            {isAut ? (
-              <div className="input text-right font-mono text-sm bg-sky-50 border-sky-100 text-sky-700 cursor-not-allowed select-none">
-                {fmt(val)}
-              </div>
-            ) : (
-              <input
+            {<input
                 type="number"
                 className={`input text-right font-mono ${isKontra ? 'border-rose-200 focus:border-rose-400' : ''}`}
                 value={val || ''}
                 placeholder="0"
                 min={0}
-                onChange={e => setManual(a.kode, Number(e.target.value) || 0)}
+                onChange={e => setManual(a.kode, Number(e.target.value) || 0}
               />
             )}
           </td>
           <td className="td text-right font-mono text-xs pr-3">
             {val ? (
-              <span className={isKontra ? 'text-rose-600' : isAut ? 'text-sky-700' : 'text-slate-700'}>
+              <span className={isKontra ? 'text-rose-600' : 'text-slate-700'}>
                 {isKontra ? `(${fmt(val)})` : fmt(val)}
               </span>
             ) : (
@@ -183,11 +155,6 @@ export default function SaldoAwalPage() {
         title="Saldo Awal"
         subtitle="Isi saldo pembuka sesuai Laporan Posisi Keuangan tahun sebelumnya"
       />
-
-      <div className="rounded-lg px-4 py-2 bg-sky-50 border border-sky-200 text-xs text-sky-700 mb-3 flex items-center gap-2">
-        <Lock size={12} />
-        <span>Akun berlabel <strong>otomatis</strong> dihitung dari data Buku Pembantu (Simpanan & Piutang SP) — konsisten dengan Posisi Keuangan dan tidak bisa diedit manual.</span>
-      </div>
 
       <div className={`rounded-lg px-4 py-3 text-sm mb-5 flex flex-wrap items-center justify-between gap-2 ${
         balanced ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'

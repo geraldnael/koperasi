@@ -845,7 +845,7 @@ export function TokoPage() {
   const penjualan = saldos['4.1.4'] ?? 0
   const retur     = saldos['4.1.6'] ?? 0
   const hpp       = saldos['5.1.1'] ?? 0
-  const piutangToko = saldos['1.1.5'] ?? 0
+  const piutangToko = saldos['1.1.6'] ?? 0
 
   return (
     <div className="p-6 max-w-2xl">

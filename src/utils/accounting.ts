@@ -122,7 +122,7 @@ export function calcNeraca(saldos: Record<string, number>, shuBersih?: number) {
   const sum = (ks: string[]) => ks.reduce((a, k) => a + r(k), 0)
 
   const kasBank         = sum(['1.1.1','1.1.2'])
-  const piutangBruto    = sum(['1.1.4','1.1.5','1.1.6'])
+  const piutangBruto    = sum(['1.1.4','1.1.5'])
   const penyisihan      = r('1.1.7')
   const piutangNeto     = piutangBruto - penyisihan
   const persediaan      = r('1.1.8') + r('1.1.9') - r('1.1.10') + r('1.1.11')
@@ -131,7 +131,7 @@ export function calcNeraca(saldos: Record<string, number>, shuBersih?: number) {
 
   const investasi         = sum(['1.2.1','1.2.2','1.2.3','1.2.4','1.2.5','1.2.6'])
   const asetTetapBruto    = sum(['1.2.7','1.2.8','1.2.9','1.2.10'])
-  const akumPenyusutan    = r('1.2.11')
+  const akumPenyusutan    = r('1.2.11') + r('1.2.12') + r('1.2.13')
   const asetTetapNeto     = asetTetapBruto - akumPenyusutan
   const totalAsetTdkLancar= investasi + asetTetapNeto
   const totalAset         = totalAsetLancar + totalAsetTdkLancar
