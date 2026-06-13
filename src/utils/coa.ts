@@ -92,3 +92,9 @@ export const COA: Akun[] = [
   { kode:'5.1.22', nama:'Beban Rapat anggota',                               kelompok:'Beban', grup:'BEBAN', tipe:'D' },
   { kode:'5.1.23', nama:'Beban perkoperasian lainnya',                       kelompok:'Beban', grup:'BEBAN', tipe:'D' },
 ]
+
+// Helper: cari nama akun berdasarkan kode
+export function getAkunNama(kode: string): string {
+  const akun = COA.find(a => a.kode === kode)
+  return akun ? akun.nama : kode
+}
