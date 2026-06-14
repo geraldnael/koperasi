@@ -380,8 +380,8 @@ export function calcPiutangSPBulanan(
   Object.values(result).forEach(a => {
     const totalPokok = Object.values(a.bulan).reduce((s, b) => s + b.pokok, 0)
     const totalJasa  = Object.values(a.bulan).reduce((s, b) => s + b.jasa, 0)
-    a.saldoPokok     = a.saldoAwal + a.realisasiPokok - totalPokok
-    a.saldoAkhirJasa = a.saldoAwalJasa + a.realisasiJasa - totalJasa
+    a.saldoPokok     = a.saldoAwal + totalPokok
+    a.saldoAkhirJasa = a.saldoAwalJasa + totalJasa
   })
 
   return result

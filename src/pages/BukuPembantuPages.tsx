@@ -84,7 +84,6 @@ export function SHUPage() {
         </button>
       </div>
 
-      {/* alokasi tabel */}
       {shuBersih > 0 && (
         <div className="card overflow-hidden">
           <div className="px-4 py-3 border-b border-slate-100">
@@ -144,9 +143,6 @@ export function SHUPage() {
                       </tr>
                     )
                   })}
-                  <p className="text-[10px] text-slate-400 px-3 py-1">
-                    * Estimasi dibagi rata. Implementasi by-name memerlukan data partisipasi per anggota.
-                  </p>
                 </tbody>
               </table>
             </>
@@ -158,27 +154,87 @@ export function SHUPage() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────
-// Simpanan Anggota — Format sesuai Excel REKAP 2025:
-// NO | NAMA | SIMP.POKOK | SIMP.WAJIB | WJ.KHS | SUKARELA | JASA SUK | THT | JASA THT | JUMLAH
+// SIMPANAN ANGGOTA — dipecah per jenis, tiap jenis tampil bulan Jan–Des
+// Struktur sama persis dengan sheet Excel:
+//   NO | NAMA | SALDO AWAL | JAN | FEB | ... | DES | JUMLAH | SALDO AKHIR
 // ─────────────────────────────────────────────────────────────────────────
-const BULAN = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Ags','Sep','Okt','Nov','Des']
+const BULAN_LABEL = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Ags','Sep','Okt','Nov','Des']
 
 type JenisSimpanan = 'wajib' | 'wajib_khs' | 'sukarela' | 'jasa_suk' | 'tht' | 'jasa_tht'
 
-const KOLOM_SIMPANAN = [
-  { key:'pokok'     as const, label:'SIMPANAN\nPOKOK',          short:'Pokok',    color:'text-blue-700'    },
-  { key:'wajib'     as const, label:'SIMPANAN\nWAJIB',          short:'Wajib',    color:'text-emerald-700' },
-  { key:'wajib_khs' as const, label:'SIMPANAN\nWAJIB KHUSUS',   short:'Wj.Khs',  color:'text-violet-700'  },
-  { key:'sukarela'  as const, label:'SIMPANAN\nSUKARELA',        short:'Sukarela', color:'text-amber-700'   },
-  { key:'jasa_suk'  as const, label:'JASA SIMP\nSUKARELA',      short:'Jasa Suk', color:'text-orange-600'  },
-  { key:'tht'       as const, label:'THT',                       short:'THT',      color:'text-teal-700'    },
-  { key:'jasa_tht'  as const, label:'JASA\nTHT',                 short:'Jasa THT', color:'text-cyan-700'    },
-]
+// Definisi tiap tab simpanan — sama dengan sheet Excel
+const TAB_SIMPANAN = [
+  {
+    key: 'rekap'      as const,
+    label: 'Rekap 2026',
+    color: 'bg-slate-700',
+    headerColor: 'bg-slate-700',
+    short: 'Rekap',
+  },
+  {
+    key: 'pokok'      as const,
+    label: 'Simpanan Pokok',
+    color: 'bg-blue-700',
+    headerColor: 'bg-blue-800',
+    short: 'Pokok',
+    jenis: undefined as undefined,
+    saldoAwalLabel: 'SALDO AWAL SIMPANAN POKOK',
+    saldoAkhirLabel: 'SALDO AKHIR SIMPANAN POKOK',
+  },
+  {
+    key: 'wajib'      as const,
+    label: 'Simpanan Wajib',
+    color: 'bg-emerald-700',
+    headerColor: 'bg-emerald-800',
+    short: 'Wajib',
+    jenis: 'wajib' as JenisSimpanan,
+    saldoAwalLabel: 'SALDO AWAL SIMPANAN WAJIB',
+    saldoAkhirLabel: 'SALDO AKHIR SIMPANAN WAJIB',
+  },
+  {
+    key: 'wajib_khs'  as const,
+    label: 'Simpanan Wajib Khusus',
+    color: 'bg-violet-700',
+    headerColor: 'bg-violet-800',
+    short: 'Wj.Khs',
+    jenis: 'wajib_khs' as JenisSimpanan,
+    saldoAwalLabel: 'SALDO AWAL SIMPANAN WAJIB KHUSUS',
+    saldoAkhirLabel: 'SALDO AKHIR SIMPANAN WAJIB KHUSUS',
+  },
+  {
+    key: 'sukarela'   as const,
+    label: 'Simpanan Sukarela',
+    color: 'bg-amber-600',
+    headerColor: 'bg-amber-700',
+    short: 'Sukarela',
+    jenis: 'sukarela' as JenisSimpanan,
+    saldoAwalLabel: 'SALDO AWAL SIMPANAN SUKARELA',
+    saldoAkhirLabel: 'SALDO AKHIR SIMPANAN SUKARELA',
+    jasaKey: 'jasa_suk' as JenisSimpanan,
+    jasaLabel: 'SALDO AWAL JASA SIMPANAN SUKARELA',
+    jasaAkhirLabel: 'SALDO AKHIR JASA SIMPANAN SUKARELA',
+  },
+  {
+    key: 'tht'        as const,
+    label: 'THT (Tabungan Hari Tua)',
+    color: 'bg-teal-700',
+    headerColor: 'bg-teal-800',
+    short: 'THT',
+    jenis: 'tht' as JenisSimpanan,
+    saldoAwalLabel: 'SALDO AWAL TABUNGAN HARI TUA (THT)',
+    saldoAkhirLabel: 'SALDO AKHIR TABUNGAN HARI TUA (THT)',
+    jasaKey: 'jasa_tht' as JenisSimpanan,
+    jasaLabel: 'SALDO AWAL JASA TABUNGAN HARI TUA (THT)',
+    jasaAkhirLabel: 'SALDO AKHIR JASA TABUNGAN HARI TUA (THT)',
+  },
+] as const
+
+type TabKey = typeof TAB_SIMPANAN[number]['key']
 
 export function SimpananPage() {
   const { anggota, saldoSimpanan, jurnal, identitas } = useAppStore()
-  const [search,     setSearch]     = useState('')
-  const [selectedId, setSelectedId] = useState<number | null>(null)
+  const [search,  setSearch]  = useState('')
+  const [activeTab, setActiveTab] = useState<TabKey>('rekap')
 
   // Saldo awal per anggota
   const saldoMap = useMemo(() => {
@@ -200,12 +256,12 @@ export function SimpananPage() {
     const bulan: Record<number, Record<JenisSimpanan, number>> = {}
     for (let b = 1; b <= 12; b++) {
       bulan[b] = {
-        wajib:    mut[b]?.wajib    ?? 0,
-        wajib_khs:mut[b]?.wajib_khs?? 0,
-        sukarela: mut[b]?.sukarela ?? 0,
-        jasa_suk: mut[b]?.jasa_suk ?? 0,
-        tht:      mut[b]?.tht      ?? 0,
-        jasa_tht: mut[b]?.jasa_tht ?? 0,
+        wajib:     mut[b]?.wajib     ?? 0,
+        wajib_khs: mut[b]?.wajib_khs ?? 0,
+        sukarela:  mut[b]?.sukarela  ?? 0,
+        jasa_suk:  mut[b]?.jasa_suk  ?? 0,
+        tht:       mut[b]?.tht       ?? 0,
+        jasa_tht:  mut[b]?.jasa_tht  ?? 0,
       }
     }
 
@@ -219,244 +275,373 @@ export function SimpananPage() {
     const tht       = (sa?.tht       ?? 0) + mutTot('tht')
     const jasa_tht  = (sa?.jasa_tht  ?? 0) + mutTot('jasa_tht')
     const jumlah    = pokok + wajib + wajib_khs + sukarela + jasa_suk + tht + jasa_tht
-    const pinjaman  = sa?.pinjaman ?? 0
-    const hasMutasi = Object.values(mut).some(bln => Object.values(bln).some(v => v !== 0))
 
-    return { id: a.id, nama: a.nama, pokok, wajib, wajib_khs, sukarela, jasa_suk, tht, jasa_tht, jumlah, pinjaman, bulan, hasMutasi }
+    return {
+      id: a.id, nama: a.nama,
+      // saldo awal
+      sa_pokok: sa?.pokok     ?? 0,
+      sa_wajib: sa?.wajib     ?? 0,
+      sa_wajib_khs: sa?.wajib_khs ?? 0,
+      sa_sukarela:  sa?.sukarela  ?? 0,
+      sa_jasa_suk:  sa?.jasa_suk  ?? 0,
+      sa_tht:       sa?.tht       ?? 0,
+      sa_jasa_tht:  sa?.jasa_tht  ?? 0,
+      // saldo akhir
+      pokok, wajib, wajib_khs, sukarela, jasa_suk, tht, jasa_tht, jumlah,
+      bulan,
+    }
   }), [anggota, saldoMap, mutasi])
 
   const filtered = useMemo(() =>
     search ? rows.filter(r => r.nama.toLowerCase().includes(search.toLowerCase())) : rows,
     [rows, search])
 
+  // ── Totals ──
   const totals = useMemo(() => {
-    const t = { pokok:0, wajib:0, wajib_khs:0, sukarela:0, jasa_suk:0, tht:0, jasa_tht:0, jumlah:0, pinjaman:0 }
+    const t = {
+      sa_pokok:0, sa_wajib:0, sa_wajib_khs:0, sa_sukarela:0, sa_jasa_suk:0, sa_tht:0, sa_jasa_tht:0,
+      pokok:0, wajib:0, wajib_khs:0, sukarela:0, jasa_suk:0, tht:0, jasa_tht:0, jumlah:0,
+      bulan: {} as Record<number, Record<JenisSimpanan, number>>,
+    }
+    for (let b=1;b<=12;b++) t.bulan[b]={ wajib:0, wajib_khs:0, sukarela:0, jasa_suk:0, tht:0, jasa_tht:0 }
     rows.forEach(r => {
+      t.sa_pokok+=r.sa_pokok; t.sa_wajib+=r.sa_wajib; t.sa_wajib_khs+=r.sa_wajib_khs
+      t.sa_sukarela+=r.sa_sukarela; t.sa_jasa_suk+=r.sa_jasa_suk
+      t.sa_tht+=r.sa_tht; t.sa_jasa_tht+=r.sa_jasa_tht
       t.pokok+=r.pokok; t.wajib+=r.wajib; t.wajib_khs+=r.wajib_khs
       t.sukarela+=r.sukarela; t.jasa_suk+=r.jasa_suk; t.tht+=r.tht
-      t.jasa_tht+=r.jasa_tht; t.jumlah+=r.jumlah; t.pinjaman+=r.pinjaman
+      t.jasa_tht+=r.jasa_tht; t.jumlah+=r.jumlah
+      for (let b=1;b<=12;b++) {
+        const jj = ['wajib','wajib_khs','sukarela','jasa_suk','tht','jasa_tht'] as JenisSimpanan[]
+        jj.forEach(j => { t.bulan[b][j]+=r.bulan[b][j] })
+      }
     })
     return t
   }, [rows])
 
-  const selected = rows.find(r => r.id === selectedId) ?? null
+  const tab = TAB_SIMPANAN.find(t => t.key === activeTab)!
+
+  // ── Render tabel per tab ──
+  const renderTable = () => {
+    if (activeTab === 'rekap') return renderRekap()
+    const t = TAB_SIMPANAN.find(x => x.key === activeTab)!
+    if ('jasaKey' in t && t.jasaKey) return renderWithJasa(t as any)
+    return renderSimple(t as any)
+  }
+
+  // Tab REKAP 2026 — format sama persis sheet "REKAP 2025" di Excel
+  const renderRekap = () => (
+    <div style={{overflowX:'scroll', width:'100%', borderRadius:'12px', border:'1px solid #e2e8f0', background:'white', boxShadow:'0 1px 2px rgba(0,0,0,.05)'}}>
+      <table className="text-[10px] border-collapse" style={{width:'max-content', tableLayout:'fixed'}}>
+        <thead>
+          <tr className="bg-slate-700 text-white">
+            <th className="th border border-slate-500 text-white text-center" style={{width:'28px'}}>NO</th>
+            <th className="th border border-slate-500 text-white" style={{width:'170px'}}>NAMA</th>
+            <th className="th border border-slate-500 text-white text-center" style={{width:'88px'}}>SIMPANAN<br/>POKOK</th>
+            <th className="th border border-slate-500 text-white text-center" style={{width:'88px'}}>SIMPANAN<br/>WAJIB</th>
+            <th className="th border border-slate-500 text-white text-center" style={{width:'88px'}}>SIMPANAN<br/>WAJIB KHUSUS</th>
+            <th className="th border border-slate-500 text-white text-center" style={{width:'88px'}}>SIMPANAN<br/>SUKARELA</th>
+            <th className="th border border-slate-500 text-white text-center" style={{width:'88px'}}>JASA SIMP<br/>SUKARELA</th>
+            <th className="th border border-slate-500 text-white text-center" style={{width:'80px'}}>THT</th>
+            <th className="th border border-slate-500 text-white text-center" style={{width:'80px'}}>JASA<br/>THT</th>
+            <th className="th border border-slate-500 text-white text-center bg-slate-900 font-bold" style={{width:'96px'}}>TOTAL SIMPANAN</th>
+          </tr>
+          <tr className="bg-amber-50 font-semibold text-[10px] border-b-2 border-slate-400">
+            <td className="td border border-slate-200" colSpan={2}>TOTAL ({rows.length} anggota)</td>
+            <td className="td-num border border-slate-200 font-bold text-blue-700">{fmt(totals.pokok)}</td>
+            <td className="td-num border border-slate-200 font-bold text-emerald-700">{fmt(totals.wajib)}</td>
+            <td className="td-num border border-slate-200 font-bold text-violet-700">{fmt(totals.wajib_khs)}</td>
+            <td className="td-num border border-slate-200 font-bold text-amber-700">{fmt(totals.sukarela)}</td>
+            <td className="td-num border border-slate-200 font-bold text-orange-600">{fmt(totals.jasa_suk)}</td>
+            <td className="td-num border border-slate-200 font-bold text-teal-700">{fmt(totals.tht)}</td>
+            <td className="td-num border border-slate-200 font-bold text-cyan-700">{fmt(totals.jasa_tht)}</td>
+            <td className="td-num border border-slate-200 font-bold text-slate-800">{fmt(totals.jumlah)}</td>
+          </tr>
+        </thead>
+        <tbody>
+          {filtered.map((r, i) => (
+            <tr key={r.id} className="border-b border-slate-100 hover:bg-slate-50">
+              <td className="td text-slate-400 border border-slate-100 text-center">{i+1}</td>
+              <td className="td border border-slate-100 font-medium">{r.nama}</td>
+              <td className="td-num border border-slate-100 text-blue-700">{r.pokok ? fmt(r.pokok) : '—'}</td>
+              <td className="td-num border border-slate-100 text-emerald-700">{r.wajib ? fmt(r.wajib) : '—'}</td>
+              <td className="td-num border border-slate-100 text-violet-700">{r.wajib_khs ? fmt(r.wajib_khs) : '—'}</td>
+              <td className="td-num border border-slate-100 text-amber-700">{r.sukarela ? fmt(r.sukarela) : '—'}</td>
+              <td className="td-num border border-slate-100 text-orange-600">{r.jasa_suk ? fmt(r.jasa_suk) : '—'}</td>
+              <td className="td-num border border-slate-100 text-teal-700">{r.tht ? fmt(r.tht) : '—'}</td>
+              <td className="td-num border border-slate-100 text-cyan-700">{r.jasa_tht ? fmt(r.jasa_tht) : '—'}</td>
+              <td className="td-num border border-slate-100 font-bold text-slate-800">{r.jumlah ? fmt(r.jumlah) : '—'}</td>
+            </tr>
+          ))}
+        </tbody>
+        <tfoot>
+          <tr className="bg-slate-700 text-white font-bold text-[10px]">
+            <td className="td border border-slate-500" colSpan={2}>JUMLAH TOTAL</td>
+            <td className="td-num border border-slate-500">{fmt(totals.pokok)}</td>
+            <td className="td-num border border-slate-500">{fmt(totals.wajib)}</td>
+            <td className="td-num border border-slate-500">{fmt(totals.wajib_khs)}</td>
+            <td className="td-num border border-slate-500">{fmt(totals.sukarela)}</td>
+            <td className="td-num border border-slate-500">{fmt(totals.jasa_suk)}</td>
+            <td className="td-num border border-slate-500">{fmt(totals.tht)}</td>
+            <td className="td-num border border-slate-500">{fmt(totals.jasa_tht)}</td>
+            <td className="td-num border border-slate-500">{fmt(totals.jumlah)}</td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  )
+
+  // Tab SIMPANAN POKOK / WAJIB / WAJIB KHUSUS
+  // Format: NO | NAMA | SALDO AWAL | JAN..DES | JUMLAH | SALDO AKHIR
+  const renderSimple = (t: { key: 'pokok'|'wajib'|'wajib_khs'; label: string; headerColor: string; short: string; saldoAwalLabel: string; saldoAkhirLabel: string; jenis?: JenisSimpanan }) => {
+    const isPokok = t.key === 'pokok'
+    const getSA  = (r: typeof rows[0]) => isPokok ? r.sa_pokok : (r as any)[`sa_${t.key}`] as number
+    const getAkh = (r: typeof rows[0]) => (r as any)[t.key] as number
+    const getMut = (r: typeof rows[0], b: number) => isPokok ? 0 : r.bulan[b][t.key as JenisSimpanan]
+    const getTotSA  = isPokok ? totals.sa_pokok : (totals as any)[`sa_${t.key}`] as number
+    const getTotAkh = (totals as any)[t.key] as number
+    const getBulTot = (b: number) => isPokok ? 0 : totals.bulan[b][t.key as JenisSimpanan]
+    const jumlahMutTot = isPokok ? 0 : (() => {
+      let s=0; for(let b=1;b<=12;b++) s+=getBulTot(b); return s
+    })()
+
+    return (
+      <div style={{overflowX:'scroll', width:'100%', borderRadius:'12px', border:'1px solid #e2e8f0', background:'white', boxShadow:'0 1px 2px rgba(0,0,0,.05)'}}>
+        <table className="text-[10px] border-collapse" style={{width:'max-content', tableLayout:'fixed'}}>
+          <thead>
+            <tr className={`${t.headerColor} text-white`}>
+              <th className="th border border-slate-500 text-white text-center" rowSpan={2} style={{width:'28px'}}>NO</th>
+              <th className="th border border-slate-500 text-white" rowSpan={2} style={{width:'170px'}}>NAMA</th>
+              <th className="th border border-slate-500 text-white text-center" rowSpan={2} style={{width:'88px'}}>{t.saldoAwalLabel}</th>
+              {BULAN_LABEL.map(lb => (
+                <th key={lb} className="th border border-slate-500 text-white text-center" style={{width:'72px'}}>{lb.toUpperCase()}</th>
+              ))}
+              <th className="th border border-slate-500 text-white text-center" rowSpan={2} style={{width:'80px'}}>JUMLAH</th>
+              <th className="th border border-slate-500 text-white text-center bg-slate-900" rowSpan={2} style={{width:'88px'}}>{t.saldoAkhirLabel}</th>
+            </tr>
+            <tr className={`${t.headerColor}`}></tr>
+            <tr className="bg-amber-50 font-semibold text-[10px] border-b-2 border-slate-400">
+              <td className="td border border-slate-200" colSpan={2}>TOTAL ({rows.length} anggota)</td>
+              <td className="td-num border border-slate-200 font-bold">{fmt(getTotSA)}</td>
+              {BULAN_LABEL.map((_, idx) => (
+                <td key={idx} className="td-num border border-slate-200 font-bold">{getBulTot(idx+1) ? fmt(getBulTot(idx+1)) : '—'}</td>
+              ))}
+              <td className="td-num border border-slate-200 font-bold">{jumlahMutTot ? fmt(jumlahMutTot) : (isPokok ? '0' : '—')}</td>
+              <td className="td-num border border-slate-200 font-bold">{fmt(getTotAkh)}</td>
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.map((r, i) => {
+              const sa  = getSA(r)
+              const akh = getAkh(r)
+              let jum = 0; for(let b=1;b<=12;b++) jum+=getMut(r,b)
+              return (
+                <tr key={r.id} className="border-b border-slate-100 hover:bg-slate-50">
+                  <td className="td text-slate-400 border border-slate-100 text-center">{i+1}</td>
+                  <td className="td border border-slate-100 font-medium">{r.nama}</td>
+                  <td className="td-num border border-slate-100">{sa ? fmt(sa) : '—'}</td>
+                  {BULAN_LABEL.map((_, idx) => {
+                    const v = getMut(r, idx+1)
+                    return <td key={idx} className={`td-num border border-slate-100 ${v>0?'text-emerald-700 font-semibold':v<0?'text-red-600 font-semibold':'text-slate-200'}`}>{v ? fmt(v) : '—'}</td>
+                  })}
+                  <td className="td-num border border-slate-100 font-semibold">{jum ? fmt(jum) : (isPokok ? '0' : '—')}</td>
+                  <td className="td-num border border-slate-100 font-bold">{akh ? fmt(akh) : '—'}</td>
+                </tr>
+              )
+            })}
+          </tbody>
+          <tfoot>
+            <tr className={`${t.headerColor} text-white font-bold text-[10px]`}>
+              <td className="td border border-slate-500" colSpan={2}>JUMLAH TOTAL</td>
+              <td className="td-num border border-slate-500">{fmt(getTotSA)}</td>
+              {BULAN_LABEL.map((_, idx) => (
+                <td key={idx} className="td-num border border-slate-500">{getBulTot(idx+1) ? fmt(getBulTot(idx+1)) : '—'}</td>
+              ))}
+              <td className="td-num border border-slate-500">{jumlahMutTot ? fmt(jumlahMutTot) : (isPokok ? '0' : '—')}</td>
+              <td className="td-num border border-slate-500">{fmt(getTotAkh)}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    )
+  }
+
+  // Tab SUKARELA / THT — ada kolom SS + JASA berpasangan per bulan
+  const renderWithJasa = (t: {
+    key: 'sukarela' | 'tht'; label: string; headerColor: string; jenis: JenisSimpanan; jasaKey: JenisSimpanan;
+    saldoAwalLabel: string; saldoAkhirLabel: string; jasaLabel: string; jasaAkhirLabel: string;
+  }) => {
+    const getSA      = (r: typeof rows[0]) => (r as any)[`sa_${t.key}`] as number
+    const getSAJasa  = (r: typeof rows[0]) => (r as any)[`sa_${t.jasaKey}`] as number
+    const getAkh     = (r: typeof rows[0]) => (r as any)[t.key] as number
+    const getAkhJasa = (r: typeof rows[0]) => (r as any)[t.jasaKey] as number
+    const getMut     = (r: typeof rows[0], b: number) => r.bulan[b][t.jenis]
+    const getMutJasa = (r: typeof rows[0], b: number) => r.bulan[b][t.jasaKey]
+
+    const getTotSA      = (totals as any)[`sa_${t.key}`] as number
+    const getTotSAJasa  = (totals as any)[`sa_${t.jasaKey}`] as number
+    const getTotAkh     = (totals as any)[t.key] as number
+    const getTotAkhJasa = (totals as any)[t.jasaKey] as number
+    const getBulTot     = (b: number) => totals.bulan[b][t.jenis]
+    const getBulTotJasa = (b: number) => totals.bulan[b][t.jasaKey]
+
+    let totJum=0, totJumJasa=0
+    for(let b=1;b<=12;b++){totJum+=getBulTot(b); totJumJasa+=getBulTotJasa(b)}
+
+    return (
+      <div style={{overflowX:'scroll', width:'100%', borderRadius:'12px', border:'1px solid #e2e8f0', background:'white', boxShadow:'0 1px 2px rgba(0,0,0,.05)'}}>
+        <table className="text-[10px] border-collapse" style={{width:'max-content', tableLayout:'fixed'}}>
+          <thead>
+            <tr className={`${t.headerColor} text-white`}>
+              <th className="th border border-slate-500 text-white text-center" rowSpan={2} style={{width:'28px'}}>NO</th>
+              <th className="th border border-slate-500 text-white" rowSpan={2} style={{width:'160px'}}>NAMA</th>
+              <th className="th border border-slate-500 text-white text-center" rowSpan={2} style={{width:'82px'}}>{t.saldoAwalLabel}</th>
+              <th className="th border border-slate-500 text-white text-center" rowSpan={2} style={{width:'82px'}}>{t.jasaLabel}</th>
+              {BULAN_LABEL.map(lb => (
+                <th key={lb} className="th border border-slate-500 text-white text-center" colSpan={2} style={{width:'100px'}}>{lb.toUpperCase()}</th>
+              ))}
+              <th className="th border border-slate-500 text-white text-center" rowSpan={2} style={{width:'78px'}}>JUMLAH SS<br/>S/D DES</th>
+              <th className="th border border-slate-500 text-white text-center" rowSpan={2} style={{width:'78px'}}>JUMLAH JASA<br/>S/D DES</th>
+              <th className="th border border-slate-500 text-white text-center bg-slate-900" rowSpan={2} style={{width:'82px'}}>{t.saldoAkhirLabel}</th>
+              <th className="th border border-slate-500 text-white text-center bg-slate-900" rowSpan={2} style={{width:'82px'}}>{t.jasaAkhirLabel}</th>
+            </tr>
+            <tr className={`${t.headerColor} text-white text-[9px]`}>
+              {BULAN_LABEL.map(lb => (
+                <React.Fragment key={lb}>
+                  <th className="th border border-slate-500 text-white text-right" style={{width:'50px'}}>SS</th>
+                  <th className="th border border-slate-500 text-white text-right" style={{width:'50px'}}>JASA</th>
+                </React.Fragment>
+              ))}
+            </tr>
+            <tr className="bg-amber-50 font-semibold text-[10px] border-b-2 border-slate-400">
+              <td className="td border border-slate-200" colSpan={2}>TOTAL ({rows.length} anggota)</td>
+              <td className="td-num border border-slate-200 font-bold">{fmt(getTotSA)}</td>
+              <td className="td-num border border-slate-200 font-bold">{fmt(getTotSAJasa)}</td>
+              {BULAN_LABEL.map((_, idx) => (
+                <React.Fragment key={idx}>
+                  <td className="td-num border border-slate-200 font-bold">{getBulTot(idx+1) ? fmt(getBulTot(idx+1)) : '—'}</td>
+                  <td className="td-num border border-slate-200 font-bold">{getBulTotJasa(idx+1) ? fmt(getBulTotJasa(idx+1)) : '—'}</td>
+                </React.Fragment>
+              ))}
+              <td className="td-num border border-slate-200 font-bold">{totJum ? fmt(totJum) : '—'}</td>
+              <td className="td-num border border-slate-200 font-bold">{totJumJasa ? fmt(totJumJasa) : '—'}</td>
+              <td className="td-num border border-slate-200 font-bold">{fmt(getTotAkh)}</td>
+              <td className="td-num border border-slate-200 font-bold">{fmt(getTotAkhJasa)}</td>
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.map((r, i) => {
+              const sa=getSA(r), saJ=getSAJasa(r), akh=getAkh(r), akhJ=getAkhJasa(r)
+              let jum=0, jumJ=0
+              for(let b=1;b<=12;b++){jum+=getMut(r,b); jumJ+=getMutJasa(r,b)}
+              return (
+                <tr key={r.id} className="border-b border-slate-100 hover:bg-slate-50">
+                  <td className="td text-slate-400 border border-slate-100 text-center">{i+1}</td>
+                  <td className="td border border-slate-100 font-medium">{r.nama}</td>
+                  <td className="td-num border border-slate-100">{sa ? fmt(sa) : '—'}</td>
+                  <td className="td-num border border-slate-100">{saJ ? fmt(saJ) : '—'}</td>
+                  {BULAN_LABEL.map((_, idx) => {
+                    const v=getMut(r,idx+1), vJ=getMutJasa(r,idx+1)
+                    return (
+                      <React.Fragment key={idx}>
+                        <td className={`td-num border border-slate-100 ${v?'text-emerald-700 font-semibold':'text-slate-200'}`}>{v?fmt(v):'—'}</td>
+                        <td className={`td-num border border-slate-100 ${vJ?'text-blue-700 font-semibold':'text-slate-200'}`}>{vJ?fmt(vJ):'—'}</td>
+                      </React.Fragment>
+                    )
+                  })}
+                  <td className="td-num border border-slate-100 font-semibold">{jum?fmt(jum):'—'}</td>
+                  <td className="td-num border border-slate-100 font-semibold">{jumJ?fmt(jumJ):'—'}</td>
+                  <td className="td-num border border-slate-100 font-bold">{akh?fmt(akh):'—'}</td>
+                  <td className="td-num border border-slate-100 font-bold">{akhJ?fmt(akhJ):'—'}</td>
+                </tr>
+              )
+            })}
+          </tbody>
+          <tfoot>
+            <tr className={`${t.headerColor} text-white font-bold text-[10px]`}>
+              <td className="td border border-slate-500" colSpan={2}>JUMLAH TOTAL</td>
+              <td className="td-num border border-slate-500">{fmt(getTotSA)}</td>
+              <td className="td-num border border-slate-500">{fmt(getTotSAJasa)}</td>
+              {BULAN_LABEL.map((_, idx) => (
+                <React.Fragment key={idx}>
+                  <td className="td-num border border-slate-500">{getBulTot(idx+1)?fmt(getBulTot(idx+1)):'—'}</td>
+                  <td className="td-num border border-slate-500">{getBulTotJasa(idx+1)?fmt(getBulTotJasa(idx+1)):'—'}</td>
+                </React.Fragment>
+              ))}
+              <td className="td-num border border-slate-500">{totJum?fmt(totJum):'—'}</td>
+              <td className="td-num border border-slate-500">{totJumJasa?fmt(totJumJasa):'—'}</td>
+              <td className="td-num border border-slate-500">{fmt(getTotAkh)}</td>
+              <td className="td-num border border-slate-500">{fmt(getTotAkhJasa)}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    )
+  }
 
   return (
     <div className="p-6" style={{width:'100%', minWidth:0}}>
-      <div className="no-print">
-        <PageHeader title="Simpanan Anggota"
-          subtitle="Rekapitulasi Simpanan Anggota — format sesuai RAT" />
+      <PageHeader title="Simpanan Anggota"
+        subtitle="Rekapitulasi Simpanan Anggota — format sesuai RAT" />
 
-        {/* Kartu ringkasan per jenis */}
-        <div className="grid grid-cols-3 md:grid-cols-5 gap-2 mb-4">
-          {KOLOM_SIMPANAN.map(k => (
-            <div key={k.key} className="card p-3 text-center">
-              <p className="text-[10px] text-slate-500 mb-0.5 leading-tight">{k.label.replace('\n',' ')}</p>
-              <p className={`text-xs font-bold ${k.color}`}>{fmt((totals as any)[k.key])}</p>
-            </div>
-          ))}
-          <div className="card p-3 text-center bg-slate-50 border-2 border-slate-300">
-            <p className="text-[10px] text-slate-500 mb-0.5">JUMLAH</p>
-            <p className="text-xs font-bold text-slate-800">{fmt(totals.jumlah)}</p>
-          </div>
-        </div>
-
-        {/* Search + export */}
-        <div className="flex flex-wrap gap-3 items-center mb-3">
-          <input className="input max-w-xs" placeholder="Cari nama anggota..."
-            value={search} onChange={e => setSearch(e.target.value)} />
-          <span className="text-xs text-slate-400">{filtered.length} anggota</span>
-          <button className="btn btn-sm ml-auto"
-            onClick={() => printElement('simpanan-print-area', 'Rekapitulasi Simpanan Anggota', identitas.nama)}>
-            🖨️ Cetak
+      {/* ── TABS ── */}
+      <div className="flex flex-wrap gap-1 mb-4 border-b border-slate-200 pb-2">
+        {TAB_SIMPANAN.map(t => (
+          <button key={t.key}
+            onClick={() => setActiveTab(t.key)}
+            className={`px-3 py-1.5 rounded-t text-xs font-semibold transition-colors border
+              ${activeTab === t.key
+                ? `${t.color} text-white border-transparent shadow`
+                : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}>
+            {t.label}
           </button>
-          <button className="btn btn-sm bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-700"
-            onClick={() => {
-              try {
-                const rekapRows: RekapRow[] = rows.map((r, i) => ({
-                  no: i + 1, nama: r.nama,
-                  pokok: r.pokok, wajib: r.wajib, wajib_khs: r.wajib_khs,
-                  sukarela: r.sukarela, jasa_suk: r.jasa_suk,
-                  tht: r.tht, jasa_tht: r.jasa_tht,
-                  jumlah: r.jumlah, pinjaman: r.pinjaman,
-                }))
-                if (rekapRows.length === 0) { alert('Tidak ada data untuk diexport'); return }
-                exportSimpananPinjaman(identitas, rekapRows)
-              } catch(e) {
-                console.error('Export error:', e)
-                alert('Gagal export Excel: ' + String(e))
-              }
-            }}>
-            📥 Excel ({rows.length} anggota)
-          </button>
-        </div>
+        ))}
       </div>
 
-      {/* Detail anggota terpilih */}
-      {selected && (
-        <div className="card p-5 mb-4 border-2 border-blue-300 bg-blue-50/30 no-print">
-          <div className="flex justify-between items-center mb-3">
-            <div>
-              <p className="font-semibold text-slate-800">{selected.nama}</p>
-              <p className="text-xs text-slate-500">Detail mutasi per bulan — semua jenis simpanan</p>
-            </div>
-            <button className="btn btn-sm text-xs" onClick={() => setSelectedId(null)}>✕ Tutup</button>
-          </div>
-          {/* Saldo akhir per jenis */}
-          <div className="grid grid-cols-4 md:grid-cols-8 gap-2 mb-3">
-            {KOLOM_SIMPANAN.map(k => (
-              <div key={k.key} className="bg-white rounded-lg p-2 text-center border text-xs">
-                <p className="text-slate-400 text-[9px] mb-0.5 leading-tight">{k.short}</p>
-                <p className={`font-bold ${k.color}`}>{fmt((selected as any)[k.key])}</p>
-              </div>
-            ))}
-            <div className="bg-slate-100 rounded-lg p-2 text-center border text-xs">
-              <p className="text-slate-400 text-[9px] mb-0.5">JUMLAH</p>
-              <p className="font-bold text-slate-800">{fmt(selected.jumlah)}</p>
-            </div>
-          </div>
-          {/* Tabel mutasi bulan */}
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs border-collapse">
-              <thead>
-                <tr className="bg-slate-100">
-                  <th className="th w-12">Bulan</th>
-                  {KOLOM_SIMPANAN.filter(k=>k.key!=='pokok').map(k => (
-                    <th key={k.key} className="th text-right text-[10px]">{k.short}</th>
-                  ))}
-                  <th className="th text-right">Total</th>
-                </tr>
-              </thead>
-              <tbody>
-                {BULAN.map((lb, idx) => {
-                  const b   = idx + 1
-                  const bm  = selected.bulan[b]
-                  const tot = Object.values(bm).reduce((s, v) => s + v, 0)
-                  return (
-                    <tr key={b} className={`border-b border-slate-100 ${tot ? 'bg-emerald-50/40' : ''}`}>
-                      <td className="td font-medium">{lb}</td>
-                      {KOLOM_SIMPANAN.filter(k=>k.key!=='pokok').map(k => {
-                        const v = bm[k.key as JenisSimpanan]
-                        return (
-                          <td key={k.key} className={`td-num ${v>0?k.color+' font-semibold':v<0?'text-red-600 font-semibold':'text-slate-300'}`}>
-                            {v !== 0 ? fmt(v) : '—'}
-                          </td>
-                        )
-                      })}
-                      <td className={`td-num font-semibold ${tot?'text-slate-800':'text-slate-300'}`}>
-                        {tot ? fmt(tot) : '—'}
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-              <tfoot>
-                <tr className="bg-blue-50 font-bold text-xs border-t-2 border-slate-300">
-                  <td className="td">SALDO AKHIR</td>
-                  {KOLOM_SIMPANAN.filter(k=>k.key!=='pokok').map(k => (
-                    <td key={k.key} className={`td-num ${k.color}`}>{fmt((selected as any)[k.key])}</td>
-                  ))}
-                  <td className="td-num text-slate-800 font-bold">{fmt(selected.jumlah)}</td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
-        </div>
-      )}
+      {/* ── Search + Export ── */}
+      <div className="flex flex-wrap gap-3 items-center mb-3 no-print">
+        <input className="input max-w-xs" placeholder="Cari nama anggota..."
+          value={search} onChange={e => setSearch(e.target.value)} />
+        <span className="text-xs text-slate-400">{filtered.length} anggota</span>
+        <button className="btn btn-sm ml-auto"
+          onClick={() => printElement('simpanan-print-area', `Simpanan Anggota — ${tab.label}`, identitas.nama)}>
+          🖨️ Cetak
+        </button>
+        <button className="btn btn-sm bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-700"
+          onClick={() => {
+            const rekapRows: RekapRow[] = rows.map((r, i) => ({
+              no: i + 1, nama: r.nama,
+              pokok: r.pokok, wajib: r.wajib, wajib_khs: r.wajib_khs,
+              sukarela: r.sukarela, jasa_suk: r.jasa_suk,
+              tht: r.tht, jasa_tht: r.jasa_tht,
+              jumlah: r.jumlah, pinjaman: 0,
+            }))
+            exportSimpananPinjaman(identitas, rekapRows)
+          }}>
+          📥 Excel
+        </button>
+      </div>
 
-      {/* ═══ Tabel Utama — Format Excel REKAP 2025 ═══════════════════ */}
+      {/* ── Tabel ── */}
       <div id="simpanan-print-area" style={{width:'100%'}}>
         <div className="mb-2 text-center">
           <h2 className="text-sm font-bold text-slate-700">REKAPITULASI SIMPANAN ANGGOTA KOPERASI</h2>
+          <p className="text-xs text-slate-600 font-semibold">{tab.label.toUpperCase()}</p>
           <p className="text-xs text-slate-500">{identitas.nama || 'KOPERASI'} — {identitas.akhir ? `Per ${identitas.akhir}` : `Tahun ${identitas.tahun}`}</p>
         </div>
-
-        <div style={{overflowX:'scroll', width:'100%', borderRadius:'12px', border:'1px solid #e2e8f0', background:'white', boxShadow:'0 1px 2px rgba(0,0,0,.05)'}}>
-          <table className="text-[10px] border-collapse" style={{width:'max-content', tableLayout:'fixed'}}>
-            <thead>
-              {/* Baris header 1 */}
-              <tr className="bg-slate-700 text-white">
-                <th className="th border border-slate-500 text-white text-center" rowSpan={2} style={{width:'28px'}}>NO</th>
-                <th className="th border border-slate-500 text-white" rowSpan={2} style={{width:'170px'}}>NAMA</th>
-                {KOLOM_SIMPANAN.map(k => (
-                  <th key={k.key} className="th border border-slate-500 text-white text-center" rowSpan={2} style={{width:'82px'}}>
-                    <span className="leading-tight whitespace-pre-line">{k.label}</span>
-                  </th>
-                ))}
-                <th className="th border border-slate-500 text-white text-center bg-slate-900 font-bold" rowSpan={2} style={{width:'88px'}}>JUMLAH</th>
-              </tr>
-              {/* baris 2 kosong (rowSpan di atas sudah handle) */}
-              <tr className="bg-slate-700"></tr>
-              {/* Baris total */}
-              <tr className="bg-amber-50 font-semibold border-b-2 border-slate-400 text-[10px]">
-                <td className="td border border-slate-200" colSpan={2}>TOTAL ({rows.length} anggota)</td>
-                {KOLOM_SIMPANAN.map(k => (
-                  <td key={k.key} className={`td-num border border-slate-200 font-bold ${k.color}`}>
-                    {fmt((totals as any)[k.key])}
-                  </td>
-                ))}
-                <td className="td-num border border-slate-200 font-bold text-slate-800">{fmt(totals.jumlah)}</td>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((r, i) => {
-                const isSel = r.id === selectedId
-                return (
-                  <tr key={r.id}
-                    className={`border-b border-slate-100 cursor-pointer transition-colors
-                      ${isSel ? 'bg-blue-100' : r.hasMutasi ? 'hover:bg-emerald-50/30 bg-emerald-50/10' : 'hover:bg-slate-50'}`}
-                    onClick={() => setSelectedId(isSel ? null : r.id)}
-                  >
-                    <td className="td text-slate-400 border border-slate-100 text-center">{i+1}</td>
-                    <td className="td border border-slate-100 font-medium">
-                      {r.nama}
-                      {r.hasMutasi && <span className="ml-1 text-[8px] bg-emerald-100 text-emerald-600 px-1 rounded no-print">mutasi</span>}
-                    </td>
-                    {/* Saldo akhir per jenis simpanan */}
-                    {KOLOM_SIMPANAN.map(k => {
-                      const v = (r as any)[k.key] as number
-                      return (
-                        <td key={k.key} className={`td-num border border-slate-100 ${v ? k.color : 'text-slate-200'}`}>
-                          {v ? fmt(v) : '—'}
-                        </td>
-                      )
-                    })}
-                    {/* JUMLAH semua jenis */}
-                    <td className="td-num border border-slate-100 font-bold text-slate-800 bg-slate-50/50">
-                      {r.jumlah ? fmt(r.jumlah) : '—'}
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-            <tfoot>
-              <tr className="bg-slate-700 text-white font-bold text-[10px]">
-                <td className="td border border-slate-500" colSpan={2}>JUMLAH TOTAL</td>
-                {KOLOM_SIMPANAN.map(k => (
-                  <td key={k.key} className="td-num border border-slate-500 text-white">
-                    {fmt((totals as any)[k.key])}
-                  </td>
-                ))}
-                <td className="td-num border border-slate-500 text-white">{fmt(totals.jumlah)}</td>
-              </tr>
-            </tfoot>
-          </table>
-        </div>
+        {renderTable()}
         <p className="text-xs text-slate-400 mt-3 no-print">
-          💡 Klik baris anggota untuk melihat detail mutasi per bulan per jenis simpanan.
+          💡 Pilih tab di atas untuk berpindah antar jenis simpanan.
         </p>
       </div>
     </div>
   )
 }
 
-const BULAN_LABEL = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Ags','Sep','Okt','Nov','Des']
-
 // ─────────────────────────────────────────────────────────────────────────
-// Piutang SP — Saldo Awal Pokok | Jan–Des (Pokok & Jasa) |
-//              Saldo Akhir Pokok | Saldo Awal Jasa | Saldo Akhir Jasa |
-//              Realisasi Pokok | Realisasi Jasa
-// Dengan PAGINATION
+// Piutang SP
+// SALDO AKHIR POKOK = SALDO AWAL POKOK + JUMLAH POKOK S/D DES
+// SALDO AKHIR JASA  = SALDO AWAL JASA  + JUMLAH JASA S/D DES
 // ─────────────────────────────────────────────────────────────────────────
 export function PiutangSPPage() {
   const { anggota, piutangSP, updatePiutangSP, jurnal, identitas } = useAppStore()
@@ -465,11 +650,8 @@ export function PiutangSPPage() {
   const [page,       setPage]       = useState(1)
   const [perPage]                   = useState(20)
   const [selectedId, setSelectedId] = useState<number | null>(null)
-
-  // Edit saldo inline
   const [editCell, setEditCell] = useState<{id: number; field: 'pokok' | 'jasa'; val: string} | null>(null)
 
-  // Saldo awal pokok & jasa per anggota
   const saldoAwalMap = useMemo(() => {
     const pokok: Record<string, number> = {}
     const jasa:  Record<string, number> = {}
@@ -481,44 +663,40 @@ export function PiutangSPPage() {
     return { pokok, jasa }
   }, [anggota, piutangSP])
 
-  // Hitung mutasi dari jurnal
   const mutasi = useMemo(
     () => calcPiutangSPBulanan(jurnal, saldoAwalMap.pokok, saldoAwalMap.jasa),
     [jurnal, saldoAwalMap]
   )
 
-  // Gabungkan data per anggota
   const rows = useMemo(() => anggota.map(a => {
-    const key       = a.nama.toLowerCase()
-    const sp        = piutangSP.find(p => p.anggotaId === a.id)
-    const saldoAwal = sp?.saldoAwal     ?? 0
+    const key           = a.nama.toLowerCase()
+    const sp            = piutangSP.find(p => p.anggotaId === a.id)
+    const saldoAwal     = sp?.saldoAwal     ?? 0
     const saldoAwalJasa = sp?.saldoAwalJasa ?? 0
-    const mut       = mutasi[key]
+    const mut           = mutasi[key]
 
     const bulan: Record<number, { pokok: number; jasa: number }> = {}
     for (let b = 1; b <= 12; b++) {
       bulan[b] = { pokok: mut?.bulan[b]?.pokok ?? 0, jasa: mut?.bulan[b]?.jasa ?? 0 }
     }
 
-    const realisasiPokok = mut?.realisasiPokok ?? 0
-    const realisasiJasa  = mut?.realisasiJasa  ?? 0
-    const totalPokok     = Object.values(bulan).reduce((s, b) => s + b.pokok, 0)
-    const totalJasa      = Object.values(bulan).reduce((s, b) => s + b.jasa,  0)
-    const saldoPokok     = saldoAwal + realisasiPokok - totalPokok
-    const saldoAkhirJasa = saldoAwalJasa + realisasiJasa - totalJasa
-    const hasActivity    = saldoAwal > 0 || saldoAwalJasa > 0 || realisasiPokok > 0 || totalPokok > 0
+    // SALDO AKHIR POKOK = SALDO AWAL + JUMLAH POKOK S/D DES
+    const jumlahPokok    = Object.values(bulan).reduce((s, b) => s + b.pokok, 0)
+    const jumlahJasa     = Object.values(bulan).reduce((s, b) => s + b.jasa,  0)
+    const saldoPokok     = saldoAwal + jumlahPokok
+    const saldoAkhirJasa = saldoAwalJasa + jumlahJasa
+    const hasActivity    = saldoAwal > 0 || saldoAwalJasa > 0
 
     return {
       id: a.id, nama: a.nama,
       saldoAwal, saldoAwalJasa,
       bulan,
-      realisasiPokok, realisasiJasa,
+      jumlahPokok, jumlahJasa,
       saldoPokok, saldoAkhirJasa,
       hasActivity,
     }
   }), [anggota, piutangSP, mutasi])
 
-  // Filter + pagination
   const filtered = useMemo(() =>
     search ? rows.filter(r => r.nama.toLowerCase().includes(search.toLowerCase())) : rows,
     [rows, search])
@@ -528,18 +706,17 @@ export function PiutangSPPage() {
     filtered.slice((page - 1) * perPage, page * perPage),
     [filtered, page, perPage])
 
-  // Totals
   const totals = useMemo(() => {
-    const t = { saldoAwal:0, saldoAwalJasa:0, saldoPokok:0, saldoAkhirJasa:0, realisasiPokok:0, realisasiJasa:0 }
+    const t = { saldoAwal:0, saldoAwalJasa:0, saldoPokok:0, saldoAkhirJasa:0, jumlahPokok:0, jumlahJasa:0 }
     const bulanTot: Record<number,{pokok:number;jasa:number}> = {}
     for (let b=1;b<=12;b++) bulanTot[b]={pokok:0,jasa:0}
     rows.forEach(r => {
-      t.saldoAwal     += r.saldoAwal
-      t.saldoAwalJasa += r.saldoAwalJasa
-      t.saldoPokok    += r.saldoPokok
-      t.saldoAkhirJasa+= r.saldoAkhirJasa
-      t.realisasiPokok+= r.realisasiPokok
-      t.realisasiJasa += r.realisasiJasa
+      t.saldoAwal      += r.saldoAwal
+      t.saldoAwalJasa  += r.saldoAwalJasa
+      t.saldoPokok     += r.saldoPokok
+      t.saldoAkhirJasa += r.saldoAkhirJasa
+      t.jumlahPokok    += r.jumlahPokok
+      t.jumlahJasa     += r.jumlahJasa
       for (let b=1;b<=12;b++) { bulanTot[b].pokok+=r.bulan[b].pokok; bulanTot[b].jasa+=r.bulan[b].jasa }
     })
     return { ...t, bulan: bulanTot }
@@ -578,18 +755,16 @@ export function PiutangSPPage() {
 
   return (
     <div style={{padding:'24px', width:'100%', minWidth:0}}>
-
       <div className="no-print">
         <PageHeader title="Piutang Simpan Pinjam"
-          subtitle="Format sesuai RAT: Saldo Awal Pokok | Saldo Awal Jasa | Jan–Des | Jumlah S/D Des | Saldo Akhir" />
+          subtitle="Saldo Akhir = Saldo Awal + Jumlah S/D Des" />
 
-        {/* Ringkasan */}
         <div className="grid grid-cols-3 md:grid-cols-6 gap-2 mb-4">
           {[
             { l:'Saldo Awal Pokok',      v:totals.saldoAwal,      c:'text-blue-700'    },
             { l:'Saldo Awal Jasa',        v:totals.saldoAwalJasa,  c:'text-teal-700'    },
-            { l:'Jumlah Pokok S/D Des',   v:totals.realisasiPokok, c:'text-indigo-700'  },
-            { l:'Jumlah Jasa S/D Des',    v:totals.realisasiJasa,  c:'text-indigo-600'  },
+            { l:'Jumlah Pokok S/D Des',   v:totals.jumlahPokok,    c:'text-indigo-700'  },
+            { l:'Jumlah Jasa S/D Des',    v:totals.jumlahJasa,     c:'text-indigo-600'  },
             { l:'Saldo Akhir Pokok',      v:totals.saldoPokok,     c:'text-amber-700'   },
             { l:'Saldo Akhir Jasa',       v:totals.saldoAkhirJasa, c:'text-cyan-700'    },
           ].map(x => (
@@ -601,11 +776,11 @@ export function PiutangSPPage() {
         </div>
 
         <div className="bg-blue-50 border border-blue-200 text-blue-700 text-xs rounded-lg px-4 py-2 mb-4">
-          💡 Klik <strong>Saldo Awal Pokok</strong> atau <strong>Saldo Awal Jasa</strong> untuk edit langsung.
-          Kolom Jan–Des otomatis dari Jurnal Umum. Jumlah S/D Des = total angsuran sepanjang tahun.
+          💡 <strong>Rumus:</strong> Saldo Akhir Pokok = Saldo Awal Pokok + Jumlah Pokok S/D Des &nbsp;|&nbsp;
+          Saldo Akhir Jasa = Saldo Awal Jasa + Jumlah Jasa S/D Des.<br/>
+          Klik <strong>Saldo Awal</strong> untuk edit langsung. Kolom Jan–Des otomatis dari Jurnal Umum.
         </div>
 
-        {/* Search + pagination */}
         <div className="flex flex-wrap gap-3 items-center mb-3">
           <input className="input max-w-xs" placeholder="Cari nama anggota..."
             value={search} onChange={e => { setSearch(e.target.value); setPage(1) }} />
@@ -623,9 +798,9 @@ export function PiutangSPPage() {
             onClick={() => {
               const piutangRows: PiutangRow[] = rows.map((r,i) => ({
                 no:i+1, nama:r.nama,
-                saldoAwal:r.saldoAwal, realisasi:r.realisasiPokok,
+                saldoAwal:r.saldoAwal, realisasi:r.jumlahPokok,
                 bulan:r.bulan, saldoPokok:r.saldoPokok, totalJasa:r.saldoAkhirJasa,
-                saldoAwalJasa:r.saldoAwalJasa, realisasiJasa:r.realisasiJasa,
+                saldoAwalJasa:r.saldoAwalJasa, realisasiJasa:r.jumlahJasa,
               }))
               exportPiutangSP(identitas, piutangRows)
             }}>
@@ -645,8 +820,8 @@ export function PiutangSPPage() {
             {[
               { l:'Saldo Awal Pokok',    v:selected.saldoAwal,      c:'text-blue-700'    },
               { l:'Saldo Awal Jasa',      v:selected.saldoAwalJasa,  c:'text-teal-700'    },
-              { l:'Jumlah Pokok S/D Des', v:selected.realisasiPokok, c:'text-indigo-700'  },
-              { l:'Jumlah Jasa S/D Des',  v:selected.realisasiJasa,  c:'text-indigo-600'  },
+              { l:'Jumlah Pokok S/D Des', v:selected.jumlahPokok,    c:'text-indigo-700'  },
+              { l:'Jumlah Jasa S/D Des',  v:selected.jumlahJasa,     c:'text-indigo-600'  },
               { l:'Saldo Akhir Pokok',    v:selected.saldoPokok,     c:'text-amber-700'   },
               { l:'Saldo Akhir Jasa',     v:selected.saldoAkhirJasa, c:'text-cyan-700'    },
             ].map(x => (
@@ -680,17 +855,16 @@ export function PiutangSPPage() {
         </div>
       )}
 
-      {/* ═══ Tabel utama — Format Excel Piutang SP ═══════════════════ */}
+      {/* Tabel utama */}
       <div id="piutang-print-area" style={{width:'100%'}}>
         <div className="mb-2 text-center">
-          <h2 className="text-sm font-bold text-slate-700">REKAPITULASI POKOK DAN JASA PINJAMAN ANGGOTA</h2>
+          <h2 className="text-sm font-bold text-slate-700">REKAPITULASI PIUTANG SP ANGGOTA SESUAI RAT</h2>
           <p className="text-xs text-slate-500">{identitas.nama || 'KOPERASI'} — {identitas.akhir ? `Per ${identitas.akhir}` : `Tahun ${identitas.tahun}`}</p>
         </div>
 
         <div style={{overflowX:'scroll', width:'100%', borderRadius:'12px', border:'1px solid #e2e8f0', background:'white'}}>
           <table className="text-[10px] border-collapse" style={{width:'max-content', tableLayout:'fixed'}}>
             <thead>
-              {/* Header baris 1 */}
               <tr className="bg-slate-700 text-white">
                 <th className="th border border-slate-500 text-white text-center" rowSpan={2} style={{width:'28px'}}>NO</th>
                 <th className="th border border-slate-500 text-white" rowSpan={2} style={{width:'160px'}}>NAMA</th>
@@ -704,7 +878,6 @@ export function PiutangSPPage() {
                 <th className="th border border-slate-500 text-white text-center bg-amber-700" rowSpan={2} style={{width:'80px'}}>SALDO AKHIR<br/>POKOK PINJAMAN</th>
                 <th className="th border border-slate-500 text-white text-center bg-cyan-700" rowSpan={2} style={{width:'80px'}}>SALDO AKHIR<br/>JASA PINJAMAN</th>
               </tr>
-              {/* Header baris 2 — sub-header Pokok/Jasa per bulan */}
               <tr className="bg-slate-600 text-white text-[9px]">
                 {BULAN_LABEL.map(lb => (
                   <React.Fragment key={lb}>
@@ -713,7 +886,6 @@ export function PiutangSPPage() {
                   </React.Fragment>
                 ))}
               </tr>
-              {/* Grand total */}
               <tr className="bg-amber-50 font-semibold border-b-2 border-slate-400 text-[10px]">
                 <td className="td border border-slate-200" colSpan={2}>TOTAL ({rows.length} anggota)</td>
                 <td className="td-num border border-slate-200 text-blue-700 font-bold">{fmt(totals.saldoAwal)}</td>
@@ -728,8 +900,8 @@ export function PiutangSPPage() {
                     </td>
                   </React.Fragment>
                 ))}
-                <td className="td-num border border-slate-200 text-indigo-700 font-bold">{fmt(totals.realisasiPokok)}</td>
-                <td className="td-num border border-slate-200 text-indigo-600 font-bold">{fmt(totals.realisasiJasa)}</td>
+                <td className="td-num border border-slate-200 text-indigo-700 font-bold">{fmt(totals.jumlahPokok)}</td>
+                <td className="td-num border border-slate-200 text-indigo-600 font-bold">{fmt(totals.jumlahJasa)}</td>
                 <td className="td-num border border-slate-200 text-amber-700 font-bold">{fmt(totals.saldoPokok)}</td>
                 <td className="td-num border border-slate-200 text-cyan-700 font-bold">{fmt(totals.saldoAkhirJasa)}</td>
               </tr>
@@ -738,9 +910,6 @@ export function PiutangSPPage() {
               {paginated.map((r, i) => {
                 const no = (page - 1) * perPage + i + 1
                 const isSel = r.id === selectedId
-                // Hitung jumlah pokok & jasa s/d des (total angsuran/pembayaran sepanjang tahun)
-                const jumlahPokok = Object.values(r.bulan).reduce((s, b) => s + b.pokok, 0)
-                const jumlahJasa  = Object.values(r.bulan).reduce((s, b) => s + b.jasa, 0)
                 return (
                   <tr key={r.id}
                     className={`border-b border-slate-100 cursor-pointer transition-colors
@@ -752,15 +921,12 @@ export function PiutangSPPage() {
                       {r.nama}
                       {r.hasActivity && <span className="ml-1 text-[8px] bg-blue-100 text-blue-600 px-1 rounded no-print">aktif</span>}
                     </td>
-                    {/* Saldo Awal Pokok — editable */}
                     <td className="td-num border border-slate-100" onClick={e => e.stopPropagation()}>
                       <EditableCell id={r.id} field="pokok" value={r.saldoAwal} />
                     </td>
-                    {/* Saldo Awal Jasa — editable */}
                     <td className="td-num border border-slate-100" onClick={e => e.stopPropagation()}>
                       <EditableCell id={r.id} field="jasa" value={r.saldoAwalJasa} />
                     </td>
-                    {/* Jan–Des Pokok & Jasa */}
                     {Array.from({length:12},(_,idx)=>idx+1).map(b => (
                       <React.Fragment key={b}>
                         <td className={`td-num border border-slate-100 ${r.bulan[b].pokok?'text-emerald-700 font-semibold':'text-slate-200'}`}>
@@ -771,19 +937,15 @@ export function PiutangSPPage() {
                         </td>
                       </React.Fragment>
                     ))}
-                    {/* Jumlah Pokok S/D Des */}
-                    <td className={`td-num border border-slate-100 font-semibold ${jumlahPokok?'text-indigo-700':'text-slate-200'}`}>
-                      {jumlahPokok?fmt(jumlahPokok):'—'}
+                    <td className={`td-num border border-slate-100 font-semibold ${r.jumlahPokok?'text-indigo-700':'text-slate-200'}`}>
+                      {r.jumlahPokok?fmt(r.jumlahPokok):'—'}
                     </td>
-                    {/* Jumlah Jasa S/D Des */}
-                    <td className={`td-num border border-slate-100 font-semibold ${jumlahJasa?'text-indigo-600':'text-slate-200'}`}>
-                      {jumlahJasa?fmt(jumlahJasa):'—'}
+                    <td className={`td-num border border-slate-100 font-semibold ${r.jumlahJasa?'text-indigo-600':'text-slate-200'}`}>
+                      {r.jumlahJasa?fmt(r.jumlahJasa):'—'}
                     </td>
-                    {/* Saldo Akhir Pokok */}
                     <td className={`td-num border border-slate-100 font-bold ${r.saldoPokok>0?'text-amber-700':r.saldoPokok<0?'text-red-600':'text-slate-200'}`}>
                       {r.saldoPokok!==0?fmt(r.saldoPokok):'—'}
                     </td>
-                    {/* Saldo Akhir Jasa */}
                     <td className={`td-num border border-slate-100 font-bold ${r.saldoAkhirJasa>0?'text-cyan-700':r.saldoAkhirJasa<0?'text-red-600':'text-slate-200'}`}>
                       {r.saldoAkhirJasa!==0?fmt(r.saldoAkhirJasa):'—'}
                     </td>
@@ -802,8 +964,8 @@ export function PiutangSPPage() {
                     <td className="td-num border border-slate-500 text-white">{totals.bulan[b].jasa?fmt(totals.bulan[b].jasa):'—'}</td>
                   </React.Fragment>
                 ))}
-                <td className="td-num border border-slate-500 text-white">{fmt(totals.realisasiPokok)}</td>
-                <td className="td-num border border-slate-500 text-white">{fmt(totals.realisasiJasa)}</td>
+                <td className="td-num border border-slate-500 text-white">{fmt(totals.jumlahPokok)}</td>
+                <td className="td-num border border-slate-500 text-white">{fmt(totals.jumlahJasa)}</td>
                 <td className="td-num border border-slate-500 text-white">{fmt(totals.saldoPokok)}</td>
                 <td className="td-num border border-slate-500 text-white">{fmt(totals.saldoAkhirJasa)}</td>
               </tr>
@@ -811,7 +973,6 @@ export function PiutangSPPage() {
           </table>
         </div>
 
-        {/* Pagination bawah */}
         <div className="flex justify-between items-center mt-3 no-print">
           <span className="text-xs text-slate-400">
             Menampilkan {(page-1)*perPage+1}–{Math.min(page*perPage, filtered.length)} dari {filtered.length} anggota
@@ -850,7 +1011,6 @@ export function TokoPage() {
   return (
     <div className="p-6 max-w-2xl">
       <PageHeader title="Toko" subtitle="Buku pembantu transaksi penjualan barang koperasi" />
-
       <div className="grid grid-cols-2 gap-3 mb-4">
         <div className="card p-4">
           <p className="text-xs text-slate-500 mb-1">Penjualan Kotor (4.1.4)</p>
@@ -869,7 +1029,6 @@ export function TokoPage() {
           <p className="text-lg font-bold text-blue-700">Rp {fmt(piutangToko)}</p>
         </div>
       </div>
-
       <div className="card p-4">
         <p className="text-sm font-semibold text-slate-700 mb-1">Laba Kotor Toko</p>
         <p className="text-xl font-bold text-blue-700">Rp {fmt(penjualan - retur - hpp)}</p>
