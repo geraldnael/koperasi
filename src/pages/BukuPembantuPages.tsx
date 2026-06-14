@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react'
+import React, { useMemo, useState, memo } from 'react'
 import { Save } from 'lucide-react'
 import { useAppStore } from '../store/useAppStore'
 import { computeSaldos, calcSHU, calcSimpananBulanan, calcPiutangSPBulanan, fmt } from '../utils/accounting'
@@ -231,8 +231,65 @@ const TAB_SIMPANAN = [
 
 type TabKey = typeof TAB_SIMPANAN[number]['key']
 
+// ── SaldoAwalInput: input inline untuk saldo awal simpanan, di-memo agar tidak re-render ──
+type SimpField = 'pokok' | 'wajib' | 'wajib_khs' | 'sukarela' | 'jasa_suk' | 'tht' | 'jasa_tht'
+
+const SaldoAwalInput = memo(function SaldoAwalInput({
+  anggotaId, field, value, onSave,
+}: {
+  anggotaId: number
+  field: SimpField
+  value: number
+  onSave: (anggotaId: number, field: SimpField, val: number) => void
+}) {
+  const [editing, setEditing] = React.useState(false)
+  const [local, setLocal] = React.useState('')
+
+  const startEdit = () => {
+    setLocal(value ? String(value) : '')
+    setEditing(true)
+  }
+
+  const commit = () => {
+    const v = Math.max(0, Number(local.replace(/[^\d.]/g, '')) || 0)
+    onSave(anggotaId, field, v)
+    setEditing(false)
+  }
+
+  if (editing) {
+    return (
+      <input
+        className="input text-right text-[10px] p-1 w-24 font-mono"
+        value={local}
+        autoFocus
+        type="number"
+        min={0}
+        onChange={e => setLocal(e.target.value)}
+        onBlur={commit}
+        onKeyDown={e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') setEditing(false) }}
+      />
+    )
+  }
+
+  return (
+    <span
+      className={`cursor-pointer hover:underline block text-right w-full text-[10px] font-mono px-1
+        ${value ? 'text-slate-700 font-semibold' : 'text-slate-300'}`}
+      onClick={startEdit}
+      title="Klik untuk edit saldo awal"
+    >
+      {value ? value.toLocaleString('id-ID') : 'ketik...'}
+    </span>
+  )
+})
+
 export function SimpananPage() {
-  const { anggota, saldoSimpanan, jurnal, identitas } = useAppStore()
+  const { anggota, saldoSimpanan, jurnal, identitas, updateSaldoSimpanan } = useAppStore()
+
+  // Simpan saldo awal per anggota per field — dipanggil dari SaldoAwalInput
+  const onSaveSA = React.useCallback((anggotaId: number, field: SimpField, val: number) => {
+    updateSaldoSimpanan(anggotaId, { [field]: val })
+  }, [updateSaldoSimpanan])
   const [search,  setSearch]  = useState('')
   const [activeTab, setActiveTab] = useState<TabKey>('rekap')
 
@@ -439,7 +496,9 @@ export function SimpananPage() {
                 <tr key={r.id} className="border-b border-slate-100 hover:bg-slate-50">
                   <td className="td text-slate-400 border border-slate-100 text-center">{i+1}</td>
                   <td className="td border border-slate-100 font-medium">{r.nama}</td>
-                  <td className="td-num border border-slate-100">{sa ? fmt(sa) : '—'}</td>
+                  <td className="td-num border border-slate-100 p-0.5">
+                    <SaldoAwalInput anggotaId={r.id} field={isPokok ? 'pokok' : t.key as any} value={sa} onSave={onSaveSA} />
+                  </td>
                   {BULAN_LABEL.map((_, idx) => {
                     const v = getMut(r, idx+1)
                     return <td key={idx} className={`td-num border border-slate-100 ${v>0?'text-emerald-700 font-semibold':v<0?'text-red-600 font-semibold':'text-slate-200'}`}>{v ? fmt(v) : '—'}</td>
@@ -538,8 +597,12 @@ export function SimpananPage() {
                 <tr key={r.id} className="border-b border-slate-100 hover:bg-slate-50">
                   <td className="td text-slate-400 border border-slate-100 text-center">{i+1}</td>
                   <td className="td border border-slate-100 font-medium">{r.nama}</td>
-                  <td className="td-num border border-slate-100">{sa ? fmt(sa) : '—'}</td>
-                  <td className="td-num border border-slate-100">{saJ ? fmt(saJ) : '—'}</td>
+                  <td className="td-num border border-slate-100 p-0.5">
+                    <SaldoAwalInput anggotaId={r.id} field={t.key as any} value={sa} onSave={onSaveSA} />
+                  </td>
+                  <td className="td-num border border-slate-100 p-0.5">
+                    <SaldoAwalInput anggotaId={r.id} field={t.jasaKey as any} value={saJ} onSave={onSaveSA} />
+                  </td>
                   {BULAN_LABEL.map((_, idx) => {
                     const v=getMut(r,idx+1), vJ=getMutJasa(r,idx+1)
                     return (

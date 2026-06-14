@@ -2,7 +2,6 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { Identitas, JurnalEntry } from '../types'
 import { ANGGOTA_MASTER } from '../data/anggota'
-import { SALDO_SIMPANAN_MASTER } from '../data/simpanan'
 import {
   dbGetIdentitas, dbSetIdentitas,
   dbGetSaldoAwal, dbSetSaldoAwal, dbUpdateSaldoAkun,
@@ -105,11 +104,8 @@ const defaultAnggota: Anggota[] = ANGGOTA_MASTER.map(a => ({
   alamat: '', telepon: '', email: '',
 }))
 
-const defaultSaldoSimpanan: SaldoSimpanan[] = SALDO_SIMPANAN_MASTER.map(s => ({
-  anggotaId: s.anggotaNo, pokok: s.pokok, wajib: s.wajib,
-  wajib_khs: s.wajib_khs, sukarela: s.sukarela, jasa_suk: s.jasa_suk,
-  tht: s.tht, jasa_tht: s.jasa_tht, pinjaman: s.pinjaman,
-}))
+// Saldo simpanan dikosongkan — diisi manual per anggota
+const defaultSaldoSimpanan: SaldoSimpanan[] = []
 
 
 // ── Store ─────────────────────────────────────────────────────────────────

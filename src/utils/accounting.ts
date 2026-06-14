@@ -345,6 +345,13 @@ export function calcPiutangSPBulanan(
     return k
   }
 
+  // Akun yang relevan untuk piutang SP:
+  // 1.1.4 = Piutang Simpan Pinjam (debet = realisasi pinjaman baru)
+  // 4.1.1 = Pendapatan Jasa Pinjaman (kredit = jasa/bunga)
+  // Angsuran pokok: kredit di akun selain 4.1.1 dengan keterangan nama anggota
+  const AKUN_PIUTANG  = '1.1.4'
+  const AKUN_JASA_SP  = '4.1.1'
+
   jurnal.forEach(j => {
     if (!j.tanggal) return
     const bulan = new Date(j.tanggal).getMonth() + 1
@@ -357,21 +364,23 @@ export function calcPiutangSPBulanan(
       const kredit = r.kredit || 0
       if (!debet && !kredit) return
 
+      // Hanya proses baris yang terkait akun piutang SP atau jasa pinjaman
+      const isRealisasi  = r.kode_d === AKUN_PIUTANG && debet > 0   // realisasi pinjaman baru
+      const isAngsuran   = r.kode_k === AKUN_PIUTANG && kredit > 0  // angsuran pokok
+      const isJasa       = r.kode_k === AKUN_JASA_SP && kredit > 0  // bayar jasa/bunga
+
+      if (!isRealisasi && !isAngsuran && !isJasa) return
+
       const k = ensureAnggota(nama)
 
-      if (debet > 0) {
-        // Debet → realisasi pokok (piutang bertambah)
+      if (isRealisasi) {
         result[k].realisasiPokok += debet
       }
-
-      if (kredit > 0) {
-        if (r.kode_k === '4.1.1') {
-          // Jasa/bunga per bulan
-          result[k].bulan[bulan].jasa += kredit
-        } else {
-          // Angsuran pokok per bulan
-          result[k].bulan[bulan].pokok += kredit
-        }
+      if (isAngsuran) {
+        result[k].bulan[bulan].pokok += kredit
+      }
+      if (isJasa) {
+        result[k].bulan[bulan].jasa += kredit
       }
     })
   })
