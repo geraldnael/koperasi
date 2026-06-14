@@ -1,13 +1,10 @@
-import { useMemo, useState, useEffect, useCallback } from 'react'
+import { useMemo, useState, useEffect, useCallback, memo } from 'react'
 import { Save } from 'lucide-react'
 import { COA } from '../utils/coa'
 import type { Akun } from '../types'
 import { fmt } from '../utils/accounting'
 import { useAppStore } from '../store/useAppStore'
 import { PageHeader } from '../components/ui'
-
-// ── Akun otomatis dari Buku Pembantu — konsisten dengan Posisi Keuangan ──
-// Hanya akun yang MURNI = total per anggota di master simpanan
 
 function getAllCOA(): Akun[] {
   try {
@@ -24,106 +21,60 @@ function getAllCOA(): Akun[] {
 
 const isKontraAset = (a: Akun) => a.grup === 'ASET' && a.tipe === 'K'
 
-export default function SaldoAwalPage() {
-  const { saldoAwal, setSaldoAwal } = useAppStore()
+// ── AkunRow: komponen per baris, di-memo agar tidak re-render saat baris lain berubah ──
+const AkunRow = memo(function AkunRow({
+  akun, value, onChange,
+}: {
+  akun: Akun
+  value: number
+  onChange: (kode: string, val: number) => void
+}) {
+  const isKontra = isKontraAset(akun)
+  return (
+    <tr className="hover:bg-slate-50 border-b border-slate-50">
+      <td className="td font-mono text-xs text-slate-500">{akun.kode}</td>
+      <td className="td text-sm">
+        <span>{akun.nama}</span>
+        {isKontra && (
+          <span className="ml-1.5 text-[9px] font-semibold text-rose-500 bg-rose-50 px-1 py-0.5 rounded">kontra</span>
+        )}
+      </td>
+      <td className="td pr-2">
+        <input
+          type="number"
+          className={`input text-right font-mono ${isKontra ? 'border-rose-200 focus:border-rose-400' : ''}`}
+          value={value || ''}
+          placeholder="0"
+          min={0}
+          onChange={e => onChange(akun.kode, Number(e.target.value) || 0)}
+        />
+      </td>
+      <td className="td text-right font-mono text-xs pr-3">
+        {value ? (
+          <span className={isKontra ? 'text-rose-600' : 'text-slate-700'}>
+            {isKontra ? `(${fmt(value)})` : fmt(value)}
+          </span>
+        ) : (
+          <span className="text-slate-300">—</span>
+        )}
+      </td>
+    </tr>
+  )
+})
 
-  const [local, setLocal] = useState<Record<string, number>>(() => {
-    const base = { ...saldoAwal }
-    return base
-  })
-  const [saved, setSaved]   = useState(false)
-  const [allCOA, setAllCOA] = useState<Akun[]>(getAllCOA)
-
-  // Sync dari Supabase realtime (device lain)
-  useEffect(() => {
-    setLocal(prev => {
-      const next = { ...saldoAwal }
-      const isDiff = Object.keys(next).some(k => next[k] !== prev[k]) ||
-                     Object.keys(prev).some(k => next[k] !== prev[k])
-      return isDiff ? next : prev
-    })
-  }, [saldoAwal])
-
-  useEffect(() => {
-    const refresh = () => setAllCOA(getAllCOA())
-    window.addEventListener('storage', refresh)
-    const interval = setInterval(() => setAllCOA(getAllCOA()), 2000)
-    return () => { window.removeEventListener('storage', refresh); clearInterval(interval) }
-  }, [])
-
-  const setManual = useCallback((kode: string, val: number) =>
-    setLocal(s => ({ ...s, [kode]: Math.max(0, val) })), [])
-
-  const merged = local
-
-  const asetAkun      = useMemo(() => allCOA.filter(a => a.grup === 'ASET'), [allCOA])
-  const kewajibanAkun = useMemo(() => allCOA.filter(a => a.grup === 'KEWAJIBAN'), [allCOA])
-  const ekuitasAkun   = useMemo(() => allCOA.filter(a => a.grup === 'EKUITAS'), [allCOA])
-
-  const totalAset = useMemo(() =>
-    asetAkun.reduce((s, a) => {
-      const val = merged[a.kode] ?? 0
-      return s + (isKontraAset(a) ? -val : val)
-    }, 0), [merged, asetAkun])
-
-  const totalKewajiban = useMemo(() =>
-    kewajibanAkun.reduce((s, a) => s + (merged[a.kode] ?? 0), 0),
-    [merged, kewajibanAkun])
-
-  const totalEkuitas = useMemo(() =>
-    ekuitasAkun.reduce((s, a) => s + (merged[a.kode] ?? 0), 0),
-    [merged, ekuitasAkun])
-
-  const totalKewajEkuitas = totalKewajiban + totalEkuitas
-  const selisih  = Math.abs(totalAset - totalKewajEkuitas)
-  const balanced = selisih < 1
-
-  const handleSave = () => {
-    setSaldoAwal(merged)
-    setSaved(true)
-    setTimeout(() => setSaved(false), 2000)
-  }
-
-  const renderAkunRows = (list: Akun[]) =>
-    list.map(a => {
-      const isKontra = isKontraAset(a)
-      const val      = merged[a.kode] ?? 0
-      return (
-        <tr key={a.kode} className={`hover:bg-slate-50 border-b border-slate-50 `}>
-          <td className="td font-mono text-xs text-slate-500">{a.kode}</td>
-          <td className="td text-sm">
-            <span>{a.nama}</span>
-            {isKontra && (
-              <span className="ml-1.5 text-[9px] font-semibold text-rose-500 bg-rose-50 px-1 py-0.5 rounded">kontra</span>
-            )}
-          </td>
-          <td className="td pr-2">
-            {<input
-                type="number"
-                className={`input text-right font-mono ${isKontra ? 'border-rose-200 focus:border-rose-400' : ''}`}
-                value={val || ''}
-                placeholder="0"
-                min={0}
-                onChange={e => setManual(a.kode, Number(e.target.value) || 0)}
-              />
-            }
-          </td>
-          <td className="td text-right font-mono text-xs pr-3">
-            {val ? (
-              <span className={isKontra ? 'text-rose-600' : 'text-slate-700'}>
-                {isKontra ? `(${fmt(val)})` : fmt(val)}
-              </span>
-            ) : (
-              <span className="text-slate-300">—</span>
-            )}
-          </td>
-        </tr>
-      )
-    })
-
-  const SectionTable = ({ title, colorClass, list, total, totalLabel }: {
-    title: string; colorClass: string; list: Akun[]; total: number; totalLabel: string
-  }) => (
+// ── SectionTable: di-definisikan di luar komponen utama agar tidak di-recreate setiap render ──
+const SectionTable = memo(function SectionTable({
+  title, colorClass, list, total, totalLabel, values, onChange,
+}: {
+  title: string
+  colorClass: string
+  list: Akun[]
+  total: number
+  totalLabel: string
+  values: Record<string, number>
+  onChange: (kode: string, val: number) => void
+}) {
+  return (
     <div className="card overflow-hidden">
       <div className={`px-4 py-2.5 border-b flex items-center justify-between ${colorClass}`}>
         <span className="text-xs font-bold uppercase tracking-wide">{title}</span>
@@ -138,7 +89,16 @@ export default function SaldoAwalPage() {
             <th className="th w-32 text-right">Saldo</th>
           </tr>
         </thead>
-        <tbody>{renderAkunRows(list)}</tbody>
+        <tbody>
+          {list.map(a => (
+            <AkunRow
+              key={a.kode}
+              akun={a}
+              value={values[a.kode] ?? 0}
+              onChange={onChange}
+            />
+          ))}
+        </tbody>
         <tfoot>
           <tr className={`border-t-2 ${colorClass}`}>
             <td colSpan={3} className="td text-xs font-bold text-right pr-3">{totalLabel}</td>
@@ -148,6 +108,59 @@ export default function SaldoAwalPage() {
       </table>
     </div>
   )
+})
+
+export default function SaldoAwalPage() {
+  const { saldoAwal, setSaldoAwal } = useAppStore()
+
+  const [local, setLocal] = useState<Record<string, number>>(() => ({ ...saldoAwal }))
+  const [saved, setSaved] = useState(false)
+
+  // Sync dari Supabase realtime — HANYA saat saldoAwal berubah dari luar (device lain),
+  // tidak saat user sedang mengetik (cek isDiff supaya tidak trigger saat equal)
+  useEffect(() => {
+    setLocal(prev => {
+      const next = { ...saldoAwal }
+      const isDiff =
+        Object.keys(next).some(k => next[k] !== prev[k]) ||
+        Object.keys(prev).some(k => next[k] !== prev[k])
+      return isDiff ? next : prev
+    })
+  }, [saldoAwal])
+
+  // COA dimuat sekali saja — tidak pakai interval agar tidak trigger re-render tiap 2 detik
+  const allCOA = useMemo(() => getAllCOA(), [])
+
+  const setManual = useCallback((kode: string, val: number) =>
+    setLocal(s => ({ ...s, [kode]: Math.max(0, val) })), [])
+
+  const asetAkun      = useMemo(() => allCOA.filter(a => a.grup === 'ASET'), [allCOA])
+  const kewajibanAkun = useMemo(() => allCOA.filter(a => a.grup === 'KEWAJIBAN'), [allCOA])
+  const ekuitasAkun   = useMemo(() => allCOA.filter(a => a.grup === 'EKUITAS'), [allCOA])
+
+  const totalAset = useMemo(() =>
+    asetAkun.reduce((s, a) => {
+      const val = local[a.kode] ?? 0
+      return s + (isKontraAset(a) ? -val : val)
+    }, 0), [local, asetAkun])
+
+  const totalKewajiban = useMemo(() =>
+    kewajibanAkun.reduce((s, a) => s + (local[a.kode] ?? 0), 0),
+    [local, kewajibanAkun])
+
+  const totalEkuitas = useMemo(() =>
+    ekuitasAkun.reduce((s, a) => s + (local[a.kode] ?? 0), 0),
+    [local, ekuitasAkun])
+
+  const totalKewajEkuitas = totalKewajiban + totalEkuitas
+  const selisih  = Math.abs(totalAset - totalKewajEkuitas)
+  const balanced = selisih < 1
+
+  const handleSave = () => {
+    setSaldoAwal(local)
+    setSaved(true)
+    setTimeout(() => setSaved(false), 2000)
+  }
 
   return (
     <div className="p-6 max-w-5xl">
@@ -157,8 +170,9 @@ export default function SaldoAwalPage() {
       />
 
       <div className={`rounded-lg px-4 py-3 text-sm mb-5 flex flex-wrap items-center justify-between gap-2 ${
-        balanced ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                 : 'bg-amber-50 text-amber-700 border border-amber-200'
+        balanced
+          ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+          : 'bg-amber-50 text-amber-700 border border-amber-200'
       }`}>
         <span className="font-semibold">{balanced ? '✓ Neraca seimbang' : '⚠ Neraca belum seimbang'}</span>
         <span className="font-mono text-xs flex flex-wrap gap-4">
@@ -173,23 +187,36 @@ export default function SaldoAwalPage() {
           <SectionTable
             title="ASET"
             colorClass="bg-blue-50 border-blue-100 text-blue-700"
-            list={asetAkun} total={totalAset} totalLabel="Total Aset"
+            list={asetAkun}
+            total={totalAset}
+            totalLabel="Total Aset"
+            values={local}
+            onChange={setManual}
           />
         </div>
         <div className="space-y-4">
           <SectionTable
             title="KEWAJIBAN"
             colorClass="bg-amber-50 border-amber-100 text-amber-700"
-            list={kewajibanAkun} total={totalKewajiban} totalLabel="Total Kewajiban"
+            list={kewajibanAkun}
+            total={totalKewajiban}
+            totalLabel="Total Kewajiban"
+            values={local}
+            onChange={setManual}
           />
           <SectionTable
             title="EKUITAS / MODAL"
             colorClass="bg-emerald-50 border-emerald-100 text-emerald-700"
-            list={ekuitasAkun} total={totalEkuitas} totalLabel="Total Ekuitas"
+            list={ekuitasAkun}
+            total={totalEkuitas}
+            totalLabel="Total Ekuitas"
+            values={local}
+            onChange={setManual}
           />
           <div className={`rounded-lg px-4 py-3 border-2 flex items-center justify-between text-sm font-semibold ${
-            balanced ? 'border-emerald-300 bg-emerald-50 text-emerald-700'
-                     : 'border-amber-300 bg-amber-50 text-amber-700'
+            balanced
+              ? 'border-emerald-300 bg-emerald-50 text-emerald-700'
+              : 'border-amber-300 bg-amber-50 text-amber-700'
           }`}>
             <span>Total Kewajiban + Modal</span>
             <span className="font-mono">{fmt(totalKewajEkuitas)}</span>

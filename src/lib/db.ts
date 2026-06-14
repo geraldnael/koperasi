@@ -53,12 +53,12 @@ export async function dbGetJurnal(): Promise<JurnalEntry[]> {
     .order('id', { ascending: false })
   if (!data) return []
   return data.map(r => ({
-    id:          r.id,
-    tanggal:     r.tanggal,
-    nobukti:     r.nobukti,
-    keterangan:  r.keterangan ?? '',
-    rows:        r.rows,
-    total:       Number(r.total),
+    id:         r.id,
+    tanggal:    r.tanggal,
+    nobukti:    r.nobukti,
+    keterangan: r.keterangan ?? '',
+    rows:       r.rows,
+    total:      Number(r.total),
   }))
 }
 
@@ -131,8 +131,8 @@ export async function dbGetSaldoPiutang(): Promise<{ anggotaId: number; saldoAwa
   const { data } = await supabase.from('saldo_piutang').select('*')
   if (!data) return []
   return data.map(r => ({
-    anggotaId:    r.anggota_no,
-    saldoAwal:    Number(r.saldo_awal),
+    anggotaId:     r.anggota_no,
+    saldoAwal:     Number(r.saldo_awal),
     saldoAwalJasa: Number(r.saldo_awal_jasa ?? 0),
   }))
 }
@@ -145,21 +145,12 @@ export async function dbUpdateSaldoPiutang(anggotaId: number, saldoAwal: number,
   )
 }
 
-// ── REALTIME SUBSCRIPTION ─────────────────────────────────────────────────
-export function subscribeJurnal(callback: () => void) {
-  if (!isOnline()) return () => {}
-  const channel = supabase
-    .channel('jurnal-changes')
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'jurnal' }, callback)
-    .subscribe()
-  return () => { supabase.removeChannel(channel) }
-}
+// ── GRANULAR FETCH (untuk realtime partial update) ────────────────────────
+// Dipanggil dari App.tsx saat menerima event realtime dari tabel tertentu,
+// sehingga tidak perlu fetch ulang semua tabel setiap ada perubahan sekecil apapun.
 
-export function subscribeSaldoSimpanan(callback: () => void) {
-  if (!isOnline()) return () => {}
-  const channel = supabase
-    .channel('simpanan-changes')
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'saldo_simpanan' }, callback)
-    .subscribe()
-  return () => { supabase.removeChannel(channel) }
+export async function dbGetSaldoAwalSingle(kode: string): Promise<number | null> {
+  if (!isOnline()) return null
+  const { data } = await supabase.from('saldo_awal').select('nilai').eq('kode', kode).single()
+  return data ? Number(data.nilai) : null
 }
