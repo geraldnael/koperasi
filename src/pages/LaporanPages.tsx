@@ -1,9 +1,24 @@
 import { useMemo } from 'react'
 import { useAppStore } from '../store/useAppStore'
 import { computeSaldos, calcNeraca, calcSHU, calcArusKas, fmt } from '../utils/accounting'
-import { getAkunNama } from '../utils/coa'
+import { COA, getAkunNama } from '../utils/coa'
+import type { Akun } from '../types'
 import { PageHeader, PrintButton, DownloadButton, LapRow, LapHeader } from '../components/ui'
 import { exportNeraca, exportSHU, exportArusKas } from '../utils/exportExcel'
+
+// ── Helper: load COA termasuk custom ──────────────────────────────────────
+function getAllCOA(): Akun[] {
+  try {
+    const custom: Akun[] = JSON.parse(localStorage.getItem('sia-koperasi-custom-coa') || '[]')
+    const merged = [...COA]
+    custom.forEach(ca => {
+      const idx = merged.findIndex(a => a.kode === ca.kode)
+      if (idx >= 0) merged[idx] = ca
+      else merged.push(ca)
+    })
+    return merged.sort((a, b) => a.kode.localeCompare(b.kode, undefined, { numeric: true }))
+  } catch { return COA }
+}
 
 // ── shared header ─────────────────────────────────────────────────────────
 function ReportHeader({ title, sub }: { title: string; sub: string }) {
@@ -16,16 +31,57 @@ function ReportHeader({ title, sub }: { title: string; sub: string }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────
-// 1. NERACA
+// 1. NERACA — akun tampil satu per satu, sama persis dengan Saldo Awal
 // ─────────────────────────────────────────────────────────────────────────
 export function NeracaPage() {
   const { saldoAwal, jurnal, identitas } = useAppStore()
-  const saldos  = useMemo(() => computeSaldos(saldoAwal, jurnal), [saldoAwal, jurnal])
-  const shu     = useMemo(() => calcSHU(saldos), [saldos])
-  const neraca  = useMemo(() => calcNeraca(saldos, shu.shuBersih), [saldos, shu])
-  const n = neraca
+  const saldos = useMemo(() => computeSaldos(saldoAwal, jurnal), [saldoAwal, jurnal])
+  const shu    = useMemo(() => calcSHU(saldos), [saldos])
+  const neraca = useMemo(() => calcNeraca(saldos, shu.shuBersih), [saldos, shu])
+  const n      = neraca
 
-  const K = (k: string) => saldos[k] ?? 0
+  const allCOA = useMemo(() => getAllCOA(), [])
+
+  const isKontraAset = (a: Akun) => a.grup === 'ASET' && a.tipe === 'K'
+
+  const asetLancar     = allCOA.filter(a => a.grup === 'ASET' && a.kelompok === 'Aset Lancar')
+  const asetTdkLancar  = allCOA.filter(a => a.grup === 'ASET' && a.kelompok === 'Aset Tidak Lancar')
+  const kewJkPendek    = allCOA.filter(a => a.grup === 'KEWAJIBAN' && a.kelompok === 'Kewajiban Jk. Pendek')
+  const kewJkPanjang   = allCOA.filter(a => a.grup === 'KEWAJIBAN' && a.kelompok === 'Kewajiban Jk. Panjang')
+  const ekuitas        = allCOA.filter(a => a.grup === 'EKUITAS')
+
+  const K = (kode: string) => saldos[kode] ?? 0
+
+  // Total per kelompok — kontra akun dikurangkan
+  const sumKelompok = (list: Akun[]) =>
+    list.reduce((s, a) => s + (isKontraAset(a) ? -(K(a.kode)) : K(a.kode)), 0)
+
+  const totalAsetLancar    = sumKelompok(asetLancar)
+  const totalAsetTdkLancar = sumKelompok(asetTdkLancar)
+  const totalAset          = totalAsetLancar + totalAsetTdkLancar
+  const totalKewJkPendek   = sumKelompok(kewJkPendek)
+  const totalKewJkPanjang  = sumKelompok(kewJkPanjang)
+  const totalKewajiban     = totalKewJkPendek + totalKewJkPanjang
+  const totalEkuitas       = ekuitas.reduce((s, a) => s + K(a.kode), 0)
+  const totalKewEk         = totalKewajiban + totalEkuitas
+  const selisih            = Math.abs(totalAset - totalKewEk)
+  const seimbang           = selisih < 1
+
+  // Render baris akun — sama persis dengan Saldo Awal (semua akun tampil)
+  const renderAkunBaris = (list: Akun[]) =>
+    list.map(a => {
+      const val      = K(a.kode)
+      const isKontra = isKontraAset(a)
+      return (
+        <LapRow
+          key={a.kode}
+          label={`${a.kode} — ${a.nama}`}
+          value={isKontra ? -val : val}
+          indent={1}
+          negative={isKontra && val > 0}
+        />
+      )
+    })
 
   return (
     <div className="p-6 max-w-2xl" id="print-neraca">
@@ -40,57 +96,54 @@ export function NeracaPage() {
         }
       />
 
-      {!n.seimbang && (
+      {!seimbang && (
         <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-2 text-sm mb-4">
-          ⚠ Neraca tidak seimbang — Selisih Rp {fmt(Math.abs(n.totalAset - n.totalKewEk))}. Periksa saldo awal dan jurnal Anda.
+          ⚠ Neraca tidak seimbang — Selisih Rp {fmt(selisih)}. Periksa saldo awal dan jurnal Anda.
         </div>
       )}
 
       <div className="card p-5">
         <ReportHeader title={identitas.nama} sub={`LAPORAN POSISI KEUANGAN · Per ${identitas.akhir}`} />
 
+        {/* ══ ASET ══ */}
         <LapHeader label="ASET" />
+
         <LapHeader label="Aset Lancar" />
-        <LapRow label="Kas dan Setara Kas"    value={n.kasBank}        indent={1} />
-        <LapRow label="Piutang (neto)"        value={n.piutangNeto}    indent={1} />
-        <LapRow label="Persediaan"            value={n.persediaan}     indent={1} />
-        <LapRow label="Aset Lancar Lainnya"   value={n.asetLancarLain} indent={1} />
-        <LapRow label="Jumlah Aset Lancar"    value={n.totalAsetLancar} variant="subtotal" />
+        {renderAkunBaris(asetLancar)}
+        <LapRow label="Jumlah Aset Lancar" value={totalAsetLancar} variant="subtotal" />
 
         <LapHeader label="Aset Tidak Lancar" />
-        <LapRow label="Investasi Jangka Panjang" value={n.investasi}    indent={1} />
-        <LapRow label="Aset Tetap (neto)"        value={n.asetTetapNeto} indent={1} />
-        <LapRow label="Jumlah Aset Tidak Lancar" value={n.totalAsetTdkLancar} variant="subtotal" />
-        <LapRow label="JUMLAH ASET" value={n.totalAset} variant="total" />
+        {renderAkunBaris(asetTdkLancar)}
+        <LapRow label="Jumlah Aset Tidak Lancar" value={totalAsetTdkLancar} variant="subtotal" />
+
+        <LapRow label="JUMLAH ASET" value={totalAset} variant="total" />
 
         <div className="h-4" />
+
+        {/* ══ KEWAJIBAN ══ */}
         <LapHeader label="KEWAJIBAN DAN EKUITAS" />
+
         <LapHeader label="Kewajiban Jangka Pendek" />
-        {['2.1.1','2.1.2','2.1.3','2.1.4','2.1.5','2.1.6','2.1.7','2.1.8','2.1.9','2.1.10','2.1.11'].map(k =>
-          K(k) > 0 ? <LapRow key={k} label={getAkunNama(k)} value={K(k)} indent={1} /> : null
-        )}
-        <LapRow label="Jumlah Kewajiban Jk. Pendek" value={n.kewJkPendek} variant="subtotal" />
+        {renderAkunBaris(kewJkPendek)}
+        <LapRow label="Jumlah Kewajiban Jk. Pendek" value={totalKewJkPendek} variant="subtotal" />
 
         <LapHeader label="Kewajiban Jangka Panjang" />
-        {['2.2.1','2.2.2','2.2.3','2.2.4','2.2.5'].map(k =>
-          K(k) > 0 ? <LapRow key={k} label={getAkunNama(k)} value={K(k)} indent={1} /> : null
-        )}
-        <LapRow label="Jumlah Kewajiban Jk. Panjang" value={n.kewJkPanjang} variant="subtotal" />
-        <LapRow label="JUMLAH KEWAJIBAN" value={n.totalKewajiban} variant="total" />
+        {renderAkunBaris(kewJkPanjang)}
+        <LapRow label="Jumlah Kewajiban Jk. Panjang" value={totalKewJkPanjang} variant="subtotal" />
+
+        <LapRow label="JUMLAH KEWAJIBAN" value={totalKewajiban} variant="total" />
 
         <div className="h-4" />
-        <LapHeader label="EKUITAS" />
-        <LapRow label="Simpanan Pokok"      value={n.sp}    indent={1} />
-        <LapRow label="Simpanan Wajib"      value={n.sw}    indent={1} />
-        <LapRow label="Hibah"               value={n.hibah} indent={1} />
-        <LapRow label="Cadangan"            value={n.cad}   indent={1} />
-        <LapRow label="SHU Tahun Lalu"      value={n.shuLL} indent={1} />
-        <LapRow label="SHU Periode Berjalan" value={n.shuPB} indent={1} />
-        <LapRow label="JUMLAH EKUITAS"      value={n.totalEkuitas} variant="total" />
-        <LapRow label="JUMLAH KEWAJIBAN + EKUITAS" value={n.totalKewEk} variant="total" />
 
-        <div className={`mt-3 text-right text-xs ${n.seimbang ? 'text-emerald-600' : 'text-red-600'}`}>
-          {n.seimbang ? '✓ Neraca seimbang' : `⚠ Selisih: Rp ${fmt(Math.abs(n.totalAset - n.totalKewEk))}`}
+        {/* ══ EKUITAS ══ */}
+        <LapHeader label="EKUITAS" />
+        {renderAkunBaris(ekuitas)}
+        <LapRow label="JUMLAH EKUITAS" value={totalEkuitas} variant="total" />
+
+        <LapRow label="JUMLAH KEWAJIBAN + EKUITAS" value={totalKewEk} variant="total" />
+
+        <div className={`mt-3 text-right text-xs ${seimbang ? 'text-emerald-600' : 'text-red-600'}`}>
+          {seimbang ? '✓ Neraca seimbang' : `⚠ Selisih: Rp ${fmt(selisih)}`}
         </div>
       </div>
     </div>
