@@ -28,7 +28,6 @@ function useDebounce(fn: () => void, delay: number) {
 export default function App() {
   const [page, setPage] = useState<PageId>('dashboard')
   const { syncFromSupabase, syncStatus } = useAppStore()
-  const store = useAppStore()
 
   // ── Initial load ────────────────────────────────────────────────────────
   useEffect(() => {
