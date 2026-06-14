@@ -38,7 +38,6 @@ export function NeracaPage() {
   const saldos = useMemo(() => computeSaldos(saldoAwal, jurnal), [saldoAwal, jurnal])
   const shu    = useMemo(() => calcSHU(saldos), [saldos])
   const neraca = useMemo(() => calcNeraca(saldos, shu.shuBersih), [saldos, shu])
-  const n      = neraca
 
   const allCOA = useMemo(() => getAllCOA(), [])
 
