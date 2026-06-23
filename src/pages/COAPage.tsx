@@ -8,12 +8,6 @@ import type { Akun, TipeAkun, SaldoNormal } from '../types'
 
 // ── Akun custom disimpan di localStorage ──────────────────────────────────
 const CUSTOM_KEY = 'sia-koperasi-custom-coa'
-function loadCustom(): Akun[] {
-  try { return JSON.parse(localStorage.getItem(CUSTOM_KEY) || '[]') } catch { return [] }
-}
-function saveCustom(akun: Akun[]) {
-  localStorage.setItem(CUSTOM_KEY, JSON.stringify(akun))
-}
 
 const GRUP_OPTIONS: TipeAkun[] = ['ASET','KEWAJIBAN','EKUITAS','PENDAPATAN','BEBAN']
 

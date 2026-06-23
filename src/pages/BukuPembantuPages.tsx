@@ -11,7 +11,7 @@ import { PageHeader, FormGroup } from '../components/ui'
 // SHU Allocation Page
 // ─────────────────────────────────────────────────────────────────────────
 export function SHUPage() {
-  const { saldoAwal, jurnal, anggota, shuConfig, setSHUConfig, identitas } = useAppStore()
+  const { saldoAwal, jurnal, anggota, shuConfig, setSHUConfig, identitas, customCOA } = useAppStore()
   const saldos = useMemo(() => computeSaldos(saldoAwal, jurnal, customCOA), [saldoAwal, jurnal, customCOA])
   const shu    = useMemo(() => calcSHU(saldos), [saldos])
   const [cfg, setCfg] = useState({ ...shuConfig })
