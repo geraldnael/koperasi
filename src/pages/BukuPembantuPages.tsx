@@ -12,7 +12,7 @@ import { PageHeader, FormGroup } from '../components/ui'
 // ─────────────────────────────────────────────────────────────────────────
 export function SHUPage() {
   const { saldoAwal, jurnal, anggota, shuConfig, setSHUConfig, identitas } = useAppStore()
-  const saldos = useMemo(() => computeSaldos(saldoAwal, jurnal), [saldoAwal, jurnal])
+  const saldos = useMemo(() => computeSaldos(saldoAwal, jurnal, customCOA), [saldoAwal, jurnal, customCOA])
   const shu    = useMemo(() => calcSHU(saldos), [saldos])
   const [cfg, setCfg] = useState({ ...shuConfig })
   const [saved, setSaved] = useState(false)
@@ -1064,8 +1064,8 @@ export function PiutangSPPage() {
 }
 
 export function TokoPage() {
-  const { saldoAwal, jurnal } = useAppStore()
-  const saldos = useMemo(() => computeSaldos(saldoAwal, jurnal), [saldoAwal, jurnal])
+  const { saldoAwal, jurnal, customCOA } = useAppStore()
+  const saldos = useMemo(() => computeSaldos(saldoAwal, jurnal, customCOA), [saldoAwal, jurnal, customCOA])
   const penjualan = saldos['4.1.4'] ?? 0
   const retur     = saldos['4.1.6'] ?? 0
   const hpp       = saldos['5.1.1'] ?? 0

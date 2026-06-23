@@ -58,6 +58,7 @@ interface AppStore {
   identitas: Identitas
   anggota: Anggota[]
   nextAnggotaId: number
+  customCOA: import('../types').Akun[]
   saldoAwal: Record<string, number>
   jurnal: JurnalEntry[]
   nextJurnalId: number
@@ -72,6 +73,7 @@ interface AppStore {
   addAnggota: (a: Omit<Anggota, 'id'>) => void
   updateAnggota: (id: number, data: Partial<Omit<Anggota, 'id'>>) => void
   deleteAnggota: (id: number) => void
+  setCustomCOA: (akun: import('../types').Akun[]) => void
   setSaldoAwal: (saldo: Record<string, number>) => void
   updateSaldoAkun: (kode: string, val: number) => void
   addJurnal: (entry: Omit<JurnalEntry, 'id'>) => void
@@ -115,6 +117,7 @@ export const useAppStore = create<AppStore>()(
       identitas:     defaultIdentitas,
       anggota:       defaultAnggota,
       nextAnggotaId: defaultAnggota.length + 1,
+      customCOA:     (() => { try { return JSON.parse(localStorage.getItem('sia-koperasi-custom-coa') || '[]') } catch { return [] } })(),
       saldoAwal:     {},
       jurnal:        [],
       nextJurnalId:  1,
@@ -175,6 +178,10 @@ export const useAppStore = create<AppStore>()(
       })),
 
       // ── Saldo Awal ────────────────────────────────────────────────────
+      setCustomCOA: (akun) => {
+        set({ customCOA: akun })
+        localStorage.setItem('sia-koperasi-custom-coa', JSON.stringify(akun))
+      },
       setSaldoAwal: (saldo) => {
         set({ saldoAwal: saldo })
         dbSetSaldoAwal(saldo)
@@ -254,6 +261,7 @@ export const useAppStore = create<AppStore>()(
         identitas: defaultIdentitas,
         anggota: defaultAnggota,
         nextAnggotaId: defaultAnggota.length + 1,
+                customCOA: [],
         saldoAwal: {},
         jurnal: [],
         nextJurnalId: 1,

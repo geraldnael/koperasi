@@ -12,7 +12,7 @@ export const COA: Akun[] = [
   { kode:'1.1.8',  nama:'Persediaan Barang',                kelompok:'Aset Lancar',     grup:'ASET',      tipe:'D' },
   { kode:'1.1.9',  nama:'Persediaan Lain-lain',             kelompok:'Aset Lancar',     grup:'ASET',      tipe:'D' },
   { kode:'1.1.10', nama:'Biaya dibayar dimuka',             kelompok:'Aset Lancar',     grup:'ASET',      tipe:'D' },
-  { kode:'1.1.11', nama:'Pendapatan diterima dimuka',       kelompok:'Aset Lancar',     grup:'ASET',      tipe:'D' },
+  { kode:'2.1.15', nama:'Pendapatan diterima dimuka',       kelompok:'Kewajiban Jk. Pendek', grup:'KEWAJIBAN', tipe:'K' },
   { kode:'1.1.12', nama:'Aset lancar lainnya',              kelompok:'Aset Lancar',     grup:'ASET',      tipe:'D' },
   // ══ ASET TIDAK LANCAR ══
   { kode:'1.2.1',  nama:'Penyertaan di PKPRI',              kelompok:'Aset Tidak Lancar', grup:'ASET',    tipe:'D' },
@@ -94,6 +94,19 @@ export const COA: Akun[] = [
 ]
 
 // Helper: cari nama akun berdasarkan kode
+// ── Hook: merge COA standar + custom dari store (reaktif) ─────────────────
+// Semua halaman pakai ini agar otomatis update saat COA diubah di menu Bagan Akun
+import type { Akun } from '../types'
+export function mergeCustomCOA(customCOA: Akun[]): Akun[] {
+  const merged = [...COA]
+  customCOA.forEach(ca => {
+    const idx = merged.findIndex(a => a.kode === ca.kode)
+    if (idx >= 0) merged[idx] = ca
+    else merged.push(ca)
+  })
+  return merged.sort((a, b) => a.kode.localeCompare(b.kode, undefined, { numeric: true }))
+}
+
 export function getAkunNama(kode: string): string {
   const akun = COA.find(a => a.kode === kode)
   return akun ? akun.nama : kode

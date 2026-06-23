@@ -3,6 +3,16 @@ import type { JurnalEntry } from '../types'
 import type { Akun } from '../types'
 
 // Load COA including custom edits from localStorage
+function mergeCustom(custom: Akun[]): Akun[] {
+  const merged = [...COA]
+  custom.forEach(ca => {
+    const idx = merged.findIndex(a => a.kode === ca.kode)
+    if (idx >= 0) merged[idx] = ca
+    else merged.push(ca)
+  })
+  return merged.sort((a, b) => a.kode.localeCompare(b.kode, undefined, { numeric: true }))
+}
+
 function getAllCOA(): Akun[] {
   try {
     const custom: Akun[] = JSON.parse(localStorage.getItem('sia-koperasi-custom-coa') || '[]')
@@ -29,9 +39,10 @@ export const fmtRp = (n: number): string => `Rp ${fmt(n)}`
 /** Compute current balance for every account */
 export function computeSaldos(
   saldoAwal: Record<string, number>,
-  jurnal: JurnalEntry[]
+  jurnal: JurnalEntry[],
+  customCOAParam?: Akun[]
 ): Record<string, number> {
-  const allCOA = getAllCOA()
+  const allCOA = customCOAParam ? mergeCustom(customCOAParam) : getAllCOA()
   const saldo: Record<string, number> = {}
 
   // seed from saldo awal
@@ -58,6 +69,19 @@ export function computeSaldos(
       }
     })
   })
+
+  // Hitung SHU bersih dan masukkan ke akun 3.1.6 (SHU Periode Berjalan)
+  // agar Posisi Keuangan dan Perubahan Ekuitas otomatis terupdate
+  const pendUsaha = (saldo['4.1.1']??0)+(saldo['4.1.2']??0)+(saldo['4.1.3']??0)+
+    (saldo['4.1.4']??0)-(saldo['4.1.6']??0)+(saldo['4.1.5']??0)+
+    (saldo['4.1.7']??0)+(saldo['4.1.8']??0)
+  const bebanUsaha = ['5.1.1','5.1.2','5.1.3','5.1.4','5.1.5','5.1.6','5.1.7','5.1.8',
+    '5.1.9','5.1.10','5.1.11','5.1.12','5.1.13','5.1.14','5.1.15','5.1.16','5.1.17',
+    '5.1.18','5.1.19','5.1.20'].reduce((s,k)=>s+(saldo[k]??0),0)
+  const pendLuar  = (saldo['4.2.1']??0)+(saldo['4.2.2']??0)+(saldo['4.2.3']??0)
+  const bebanLuar = (saldo['5.2.1']??0)+(saldo['5.2.2']??0)+(saldo['5.2.3']??0)
+  const shuBersihCalc = pendUsaha - bebanUsaha + pendLuar - bebanLuar
+  saldo['3.1.6'] = (saldoAwal['3.1.6'] ?? 0) + shuBersihCalc
 
   return saldo
 }

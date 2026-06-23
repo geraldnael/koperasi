@@ -8,7 +8,7 @@ import { printElement } from '../utils/printHelper'
 import { exportBukuBesar } from '../utils/exportExcel'
 
 export default function BukuBesarPage() {
-  const { saldoAwal, jurnal, identitas } = useAppStore()
+  const { saldoAwal, jurnal, identitas, customCOA } = useAppStore()
   const [kode, setKode]     = useState('')
   const [dari, setDari]     = useState(identitas.awal || '')
   const [sampai, setSampai] = useState(identitas.akhir || '')

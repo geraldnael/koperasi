@@ -1,35 +1,30 @@
-import { useMemo, useState, useEffect, useCallback, memo } from 'react'
-import { Save } from 'lucide-react'
-import { COA } from '../utils/coa'
+import { useMemo, useState, memo, useCallback, useEffect } from 'react'
+import { mergeCustomCOA } from '../utils/coa'
 import type { Akun } from '../types'
 import { fmt } from '../utils/accounting'
 import { useAppStore } from '../store/useAppStore'
 import { PageHeader } from '../components/ui'
 
-function getAllCOA(): Akun[] {
-  try {
-    const custom: Akun[] = JSON.parse(localStorage.getItem('sia-koperasi-custom-coa') || '[]')
-    const merged = [...COA]
-    custom.forEach(ca => {
-      const idx = merged.findIndex(a => a.kode === ca.kode)
-      if (idx >= 0) merged[idx] = ca
-      else merged.push(ca)
-    })
-    return merged.sort((a, b) => a.kode.localeCompare(b.kode, undefined, { numeric: true }))
-  } catch { return COA }
-}
-
 const isKontraAset = (a: Akun) => a.grup === 'ASET' && a.tipe === 'K'
 
-// ── AkunRow: komponen per baris, di-memo agar tidak re-render saat baris lain berubah ──
+// ── AkunRow — auto-save tiap blur/Enter, TIDAK pakai tombol Simpan manual ──
 const AkunRow = memo(function AkunRow({
-  akun, value, onChange,
+  akun, value, onSave,
 }: {
   akun: Akun
   value: number
-  onChange: (kode: string, val: number) => void
+  onSave: (kode: string, val: number) => void
 }) {
   const isKontra = isKontraAset(akun)
+  const [editing, setEditing] = useState('')
+  const [isFocused, setIsFocused] = useState(false)
+
+  const commit = useCallback(() => {
+    const v = Math.max(0, Number(editing.replace(/[^\d.]/g, '')) || 0)
+    if (v !== value) onSave(akun.kode, v)
+    setIsFocused(false)
+  }, [editing, value, akun.kode, onSave])
+
   return (
     <tr className="hover:bg-slate-50 border-b border-slate-50">
       <td className="td font-mono text-xs text-slate-500">{akun.kode}</td>
@@ -42,11 +37,19 @@ const AkunRow = memo(function AkunRow({
       <td className="td pr-2">
         <input
           type="number"
-          className={`input text-right font-mono ${isKontra ? 'border-rose-200 focus:border-rose-400' : ''}`}
-          value={value || ''}
+          className={`input text-right font-mono transition-colors
+            ${isKontra ? 'border-rose-200 focus:border-rose-400' : ''}
+            ${isFocused ? 'ring-2 ring-blue-300' : ''}`}
+          value={isFocused ? editing : (value || '')}
           placeholder="0"
           min={0}
-          onChange={e => onChange(akun.kode, Number(e.target.value) || 0)}
+          onFocus={() => {
+            setEditing(value ? String(value) : '')
+            setIsFocused(true)
+          }}
+          onChange={e => setEditing(e.target.value)}
+          onBlur={commit}
+          onKeyDown={e => { if (e.key === 'Enter') { commit(); (e.target as HTMLInputElement).blur() } }}
         />
       </td>
       <td className="td text-right font-mono text-xs pr-3">
@@ -62,9 +65,9 @@ const AkunRow = memo(function AkunRow({
   )
 })
 
-// ── SectionTable: di-definisikan di luar komponen utama agar tidak di-recreate setiap render ──
+// ── SectionTable — di luar komponen utama agar tidak re-create tiap render ──
 const SectionTable = memo(function SectionTable({
-  title, colorClass, list, total, totalLabel, values, onChange,
+  title, colorClass, list, total, totalLabel, values, onSave,
 }: {
   title: string
   colorClass: string
@@ -72,13 +75,13 @@ const SectionTable = memo(function SectionTable({
   total: number
   totalLabel: string
   values: Record<string, number>
-  onChange: (kode: string, val: number) => void
+  onSave: (kode: string, val: number) => void
 }) {
   return (
     <div className="card overflow-hidden">
       <div className={`px-4 py-2.5 border-b flex items-center justify-between ${colorClass}`}>
         <span className="text-xs font-bold uppercase tracking-wide">{title}</span>
-        <span className="text-xs font-mono">{fmt(total)}</span>
+        <span className="text-xs font-mono font-bold">{fmt(total)}</span>
       </div>
       <table className="w-full">
         <thead>
@@ -95,7 +98,7 @@ const SectionTable = memo(function SectionTable({
               key={a.kode}
               akun={a}
               value={values[a.kode] ?? 0}
-              onChange={onChange}
+              onSave={onSave}
             />
           ))}
         </tbody>
@@ -111,64 +114,47 @@ const SectionTable = memo(function SectionTable({
 })
 
 export default function SaldoAwalPage() {
-  const { saldoAwal, setSaldoAwal } = useAppStore()
+  // Baca langsung dari store — tidak pakai local state lagi
+  // sehingga perubahan langsung terlihat di semua halaman
+  const { saldoAwal, updateSaldoAkun, customCOA } = useAppStore()
 
-  const [local, setLocal] = useState<Record<string, number>>(() => ({ ...saldoAwal }))
-  const [saved, setSaved] = useState(false)
+  const allCOA = useMemo(() => mergeCustomCOA(customCOA), [customCOA])
 
-  // Sync dari Supabase realtime — HANYA saat saldoAwal berubah dari luar (device lain),
-  // tidak saat user sedang mengetik (cek isDiff supaya tidak trigger saat equal)
-  useEffect(() => {
-    setLocal(prev => {
-      const next = { ...saldoAwal }
-      const isDiff =
-        Object.keys(next).some(k => next[k] !== prev[k]) ||
-        Object.keys(prev).some(k => next[k] !== prev[k])
-      return isDiff ? next : prev
-    })
-  }, [saldoAwal])
-
-  // COA dimuat sekali saja — tidak pakai interval agar tidak trigger re-render tiap 2 detik
-  const allCOA = useMemo(() => getAllCOA(), [])
-
-  const setManual = useCallback((kode: string, val: number) =>
-    setLocal(s => ({ ...s, [kode]: Math.max(0, val) })), [])
-
-  const asetAkun      = useMemo(() => allCOA.filter(a => a.grup === 'ASET'), [allCOA])
+  const asetAkun      = useMemo(() => allCOA.filter(a => a.grup === 'ASET'),      [allCOA])
   const kewajibanAkun = useMemo(() => allCOA.filter(a => a.grup === 'KEWAJIBAN'), [allCOA])
-  const ekuitasAkun   = useMemo(() => allCOA.filter(a => a.grup === 'EKUITAS'), [allCOA])
+  const ekuitasAkun   = useMemo(() => allCOA.filter(a => a.grup === 'EKUITAS'),   [allCOA])
+
+  // onSave: langsung update store + Supabase per akun — tanpa tombol Simpan
+  const handleSave = useCallback((kode: string, val: number) => {
+    updateSaldoAkun(kode, val)
+  }, [updateSaldoAkun])
 
   const totalAset = useMemo(() =>
     asetAkun.reduce((s, a) => {
-      const val = local[a.kode] ?? 0
+      const val = saldoAwal[a.kode] ?? 0
       return s + (isKontraAset(a) ? -val : val)
-    }, 0), [local, asetAkun])
+    }, 0), [saldoAwal, asetAkun])
 
   const totalKewajiban = useMemo(() =>
-    kewajibanAkun.reduce((s, a) => s + (local[a.kode] ?? 0), 0),
-    [local, kewajibanAkun])
+    kewajibanAkun.reduce((s, a) => s + (saldoAwal[a.kode] ?? 0), 0),
+    [saldoAwal, kewajibanAkun])
 
   const totalEkuitas = useMemo(() =>
-    ekuitasAkun.reduce((s, a) => s + (local[a.kode] ?? 0), 0),
-    [local, ekuitasAkun])
+    ekuitasAkun.reduce((s, a) => s + (saldoAwal[a.kode] ?? 0), 0),
+    [saldoAwal, ekuitasAkun])
 
   const totalKewajEkuitas = totalKewajiban + totalEkuitas
-  const selisih  = Math.abs(totalAset - totalKewajEkuitas)
-  const balanced = selisih < 1
-
-  const handleSave = () => {
-    setSaldoAwal(local)
-    setSaved(true)
-    setTimeout(() => setSaved(false), 2000)
-  }
+  const selisih           = Math.abs(totalAset - totalKewajEkuitas)
+  const balanced          = selisih < 1
 
   return (
     <div className="p-6 max-w-5xl">
       <PageHeader
         title="Saldo Awal"
-        subtitle="Isi saldo pembuka sesuai Laporan Posisi Keuangan tahun sebelumnya"
+        subtitle="Klik nilai lalu Enter atau klik luar — tersimpan otomatis"
       />
 
+      {/* Status neraca */}
       <div className={`rounded-lg px-4 py-3 text-sm mb-5 flex flex-wrap items-center justify-between gap-2 ${
         balanced
           ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
@@ -178,8 +164,13 @@ export default function SaldoAwalPage() {
         <span className="font-mono text-xs flex flex-wrap gap-4">
           <span>Total Aset: <strong>{fmt(totalAset)}</strong></span>
           <span>Kewajiban + Modal: <strong>{fmt(totalKewajEkuitas)}</strong></span>
-          {!balanced && <span>Selisih: <strong>{fmt(selisih)}</strong></span>}
+          {!balanced && <span className="text-amber-700">Selisih: <strong>{fmt(selisih)}</strong></span>}
         </span>
+      </div>
+
+      {/* Info auto-save */}
+      <div className="bg-blue-50 border border-blue-200 text-blue-700 text-xs rounded-lg px-4 py-2 mb-4">
+        💡 Nilai tersimpan otomatis saat Anda menekan <kbd className="bg-white border border-blue-300 px-1 rounded text-[10px]">Enter</kbd> atau klik di luar kolom input. Tidak perlu klik tombol Simpan.
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
@@ -190,8 +181,8 @@ export default function SaldoAwalPage() {
             list={asetAkun}
             total={totalAset}
             totalLabel="Total Aset"
-            values={local}
-            onChange={setManual}
+            values={saldoAwal}
+            onSave={handleSave}
           />
         </div>
         <div className="space-y-4">
@@ -201,8 +192,8 @@ export default function SaldoAwalPage() {
             list={kewajibanAkun}
             total={totalKewajiban}
             totalLabel="Total Kewajiban"
-            values={local}
-            onChange={setManual}
+            values={saldoAwal}
+            onSave={handleSave}
           />
           <SectionTable
             title="EKUITAS / MODAL"
@@ -210,8 +201,8 @@ export default function SaldoAwalPage() {
             list={ekuitasAkun}
             total={totalEkuitas}
             totalLabel="Total Ekuitas"
-            values={local}
-            onChange={setManual}
+            values={saldoAwal}
+            onSave={handleSave}
           />
           <div className={`rounded-lg px-4 py-3 border-2 flex items-center justify-between text-sm font-semibold ${
             balanced
@@ -222,17 +213,6 @@ export default function SaldoAwalPage() {
             <span className="font-mono">{fmt(totalKewajEkuitas)}</span>
           </div>
         </div>
-      </div>
-
-      <div className="flex items-center gap-3 mt-5">
-        <button onClick={handleSave} className="btn btn-primary">
-          <Save size={15} /> {saved ? 'Tersimpan ✓' : 'Simpan Saldo Awal'}
-        </button>
-        {!balanced && (
-          <p className="text-xs text-amber-600">
-            Seimbangkan Aset = Kewajiban + Modal. Selisih: Rp {fmt(selisih)}
-          </p>
-        )}
       </div>
     </div>
   )

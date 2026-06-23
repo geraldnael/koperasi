@@ -97,9 +97,11 @@ function AkunForm({
 
 // ── Main COAPage ───────────────────────────────────────────────────────────
 export default function COAPage() {
-  const { saldoAwal, jurnal } = useAppStore()
+  const { saldoAwal, jurnal, customCOA, setCustomCOA } = useAppStore()
   const [q,           setQ]           = useState('')
-  const [customAkun,  setCustomAkun]  = useState<Akun[]>(loadCustom)
+  // customAkun dari store — reaktif di semua halaman saat COA diubah
+  const customAkun = customCOA
+  const setCustomAkun = (akun: Akun[]) => setCustomCOA(akun)
   const [mode,        setMode]        = useState<'none' | 'add' | 'edit'>('none')
   const [form,        setForm]        = useState<Akun>(emptyForm())
   const [formErr,     setFormErr]     = useState('')
@@ -186,7 +188,6 @@ export default function COAPage() {
 
     updated.sort((a, b) => a.kode.localeCompare(b.kode, undefined, { numeric: true }))
     setCustomAkun(updated)
-    saveCustom(updated)
     setMode('none')
     setForm(emptyForm())
     setFormErr('')
@@ -200,7 +201,6 @@ export default function COAPage() {
     if (!confirm(msg)) return
     const updated = customAkun.filter(a => a.kode !== kode)
     setCustomAkun(updated)
-    saveCustom(updated)
     if (mode === 'edit' && form.kode === kode) setMode('none')
   }
 
@@ -208,7 +208,6 @@ export default function COAPage() {
     if (!confirm(`Reset akun ${kode} ke nilai standar?`)) return
     const updated = customAkun.filter(a => a.kode !== kode)
     setCustomAkun(updated)
-    saveCustom(updated)
   }
 
   const totalCustom = customAkun.filter(c => !COA.some(s => s.kode === c.kode)).length
