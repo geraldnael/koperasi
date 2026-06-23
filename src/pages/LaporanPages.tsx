@@ -314,7 +314,7 @@ export function EkuitasPage() {
 // 4. ARUS KAS
 // ─────────────────────────────────────────────────────────────────────────
 export function ArusKasPage() {
-  const { saldoAwal, jurnal, identitas } = useAppStore()
+  const { saldoAwal, jurnal, identitas, customCOA } = useAppStore()
   const saldos = useMemo(() => computeSaldos(saldoAwal, jurnal, customCOA), [saldoAwal, jurnal, customCOA])
   const ak     = useMemo(() => calcArusKas(saldos, saldoAwal), [saldos, saldoAwal])
 

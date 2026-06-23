@@ -1,4 +1,4 @@
-import { useMemo, useState, memo, useCallback, useEffect } from 'react'
+import { useMemo, useState, memo, useCallback,} from 'react'
 import { mergeCustomCOA } from '../utils/coa'
 import type { Akun } from '../types'
 import { fmt } from '../utils/accounting'

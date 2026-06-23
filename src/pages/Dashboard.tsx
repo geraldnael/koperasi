@@ -5,9 +5,8 @@ import { computeSaldos, calcNeraca, calcSHU, fmt } from '../utils/accounting'
 import { MetricCard, PageHeader } from '../components/ui'
 
 export default function Dashboard() {
-  const { saldoAwal, jurnal, anggota, identitas } = useAppStore()
-
-  const saldos = useMemo(() => computeSaldos(saldoAwal, jurnal, customCOA), [saldoAwal, jurnal, customCOA])
+const { saldoAwal, jurnal, identitas, customCOA } = useAppStore()
+const saldos = useMemo(() => computeSaldos(saldoAwal, jurnal, customCOA), [saldoAwal, jurnal, customCOA])
   const neraca = useMemo(() => calcNeraca(saldos), [saldos])
   const shu    = useMemo(() => calcSHU(saldos), [saldos])
 
