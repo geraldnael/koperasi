@@ -96,7 +96,6 @@ export const COA: Akun[] = [
 // Helper: cari nama akun berdasarkan kode
 // ── Hook: merge COA standar + custom dari store (reaktif) ─────────────────
 // Semua halaman pakai ini agar otomatis update saat COA diubah di menu Bagan Akun
-import type { Akun } from '../types'
 export function mergeCustomCOA(customCOA: Akun[]): Akun[] {
   const merged = [...COA]
   customCOA.forEach(ca => {
