@@ -7,7 +7,10 @@ import { PageHeader } from '../components/ui'
 import type { Akun, TipeAkun, SaldoNormal } from '../types'
 
 // ── Akun custom disimpan di localStorage ──────────────────────────────────
-
+const CUSTOM_KEY = 'sia-koperasi-custom-coa'
+function loadCustom(): Akun[] {
+  try { return JSON.parse(localStorage.getItem(CUSTOM_KEY) || '[]') } catch { return [] }
+}
 const GRUP_OPTIONS: TipeAkun[] = ['ASET','KEWAJIBAN','EKUITAS','PENDAPATAN','BEBAN']
 
 const emptyForm = (): Akun => ({ kode: '', nama: '', kelompok: '', grup: 'ASET', tipe: 'D' })
@@ -19,7 +22,7 @@ const GRUP_COLOR: Record<string, string> = {
 
 // ── Form tambah/edit ───────────────────────────────────────────────────────
 function AkunForm({
-  form, setForm, onSave, onCancel, err, isEdit,
+  form, setForm, onSave, onCancel, err, isEdit, originalKode,
 }: {
   form: Akun
   setForm: (f: Akun) => void
@@ -27,6 +30,7 @@ function AkunForm({
   onCancel: () => void
   err: string
   isEdit: boolean
+  originalKode?: string
 }) {
   return (
     <div className={`card p-5 mb-4 border-2 ${isEdit ? 'border-amber-400 bg-amber-50/20' : 'border-blue-300 bg-blue-50/20'}`}>
@@ -38,10 +42,11 @@ function AkunForm({
           <label className="label">Kode Akun *</label>
           <input className="input" placeholder="mis. 1.1.15"
             value={form.kode}
-            disabled={isEdit}
             onChange={e => setForm({ ...form, kode: e.target.value })}
-            style={isEdit ? { background: '#f1f5f9', cursor: 'not-allowed' } : {}}
           />
+          {isEdit && originalKode && form.kode !== originalKode && (
+            <p className="text-[10px] text-amber-600 mt-0.5">⚠ Kode berubah: {originalKode} → {form.kode}</p>
+          )}
         </div>
         <div className="col-span-2">
           <label className="label">Nama Akun *</label>
@@ -97,6 +102,7 @@ export default function COAPage() {
   const setCustomAkun = (akun: Akun[]) => setCustomCOA(akun)
   const [mode,        setMode]        = useState<'none' | 'add' | 'edit'>('none')
   const [form,        setForm]        = useState<Akun>(emptyForm())
+  const [originalKode, setOriginalKode] = useState<string>('')
   const [formErr,     setFormErr]     = useState('')
   const [filterGrup,  setFilterGrup]  = useState<string>('SEMUA')
 
@@ -118,6 +124,7 @@ export default function COAPage() {
   const filtered = useMemo(() => {
     const lq = q.toLowerCase()
     return allAkun.filter(a => {
+      if (a.nama.startsWith('__HIDDEN__')) return false
       const matchQ = !lq || a.kode.toLowerCase().includes(lq) ||
                             a.nama.toLowerCase().includes(lq) ||
                             a.kelompok.toLowerCase().includes(lq)
@@ -125,6 +132,16 @@ export default function COAPage() {
       return matchQ && matchGrup
     })
   }, [q, allAkun, filterGrup])
+
+  // Akun yang disembunyikan (untuk tombol restore)
+  const hiddenAkun = useMemo(() =>
+    allAkun.filter(a => a.nama.startsWith('__HIDDEN__')),
+    [allAkun])
+
+  const handleRestore = (kode: string) => {
+    const updated = customAkun.filter(a => a.kode !== kode)
+    setCustomAkun(updated)
+  }
 
   const isCustom = (kode: string) => customAkun.some(c => c.kode === kode)
   const isEdited = (kode: string) => {
@@ -144,6 +161,7 @@ export default function COAPage() {
 
   const openEdit = (a: Akun) => {
     setForm({ ...a })
+    setOriginalKode(a.kode)
     setFormErr('')
     setMode('edit')
     window.scrollTo({ top: 0, behavior: 'smooth' })
@@ -170,11 +188,21 @@ export default function COAPage() {
 
     let updated: Akun[]
     if (mode === 'edit') {
-      // Update jika sudah ada di custom, tambah jika belum (edit akun standar)
-      const exists = customAkun.find(a => a.kode === newAkun.kode)
-      updated = exists
-        ? customAkun.map(a => a.kode === newAkun.kode ? newAkun : a)
-        : [...customAkun, newAkun]
+      const kodeChanged = originalKode && originalKode !== newAkun.kode
+      if (kodeChanged) {
+        // Kode berubah: hapus kode lama dari custom, tambah kode baru
+        // Cek duplikat kode baru
+        const duplikat = allAkun.find(a => a.kode === newAkun.kode && a.kode !== originalKode)
+        if (duplikat) { setFormErr(`Kode ${newAkun.kode} sudah digunakan oleh akun lain`); return }
+        updated = customAkun.filter(a => a.kode !== originalKode)
+        updated = [...updated, newAkun]
+      } else {
+        // Kode sama: update nama/kelompok/grup/tipe
+        const exists = customAkun.find(a => a.kode === newAkun.kode)
+        updated = exists
+          ? customAkun.map(a => a.kode === newAkun.kode ? newAkun : a)
+          : [...customAkun, newAkun]
+      }
     } else {
       updated = [...customAkun, newAkun]
     }
@@ -183,17 +211,29 @@ export default function COAPage() {
     setCustomAkun(updated)
     setMode('none')
     setForm(emptyForm())
+    setOriginalKode('')
     setFormErr('')
   }
 
   const handleDelete = (kode: string) => {
     const isStandard = COA.some(a => a.kode === kode)
+    const akun = allAkun.find(a => a.kode === kode)
     const msg = isStandard
-      ? `Hapus override akun ${kode}? Akun akan kembali ke nilai standar.`
-      : `Hapus akun ${kode} secara permanen?`
+      ? `Sembunyikan akun ${kode} — ${akun?.nama} dari semua menu? Akun tidak akan muncul di COA, Saldo Awal, maupun Laporan.`
+      : `Hapus akun ${kode} — ${akun?.nama} secara permanen?`
     if (!confirm(msg)) return
-    const updated = customAkun.filter(a => a.kode !== kode)
-    setCustomAkun(updated)
+    if (isStandard) {
+      // Tandai sebagai hidden dengan nama prefix '__HIDDEN__'
+      const hidden: Akun = { ...akun!, nama: '__HIDDEN__' + akun!.nama }
+      const existing = customAkun.find(a => a.kode === kode)
+      const updated = existing
+        ? customAkun.map(a => a.kode === kode ? hidden : a)
+        : [...customAkun, hidden]
+      setCustomAkun(updated)
+    } else {
+      const updated = customAkun.filter(a => a.kode !== kode)
+      setCustomAkun(updated)
+    }
     if (mode === 'edit' && form.kode === kode) setMode('none')
   }
 
@@ -224,9 +264,10 @@ export default function COAPage() {
           form={form}
           setForm={setForm}
           onSave={handleSave}
-          onCancel={() => { setMode('none'); setFormErr('') }}
+          onCancel={() => { setMode('none'); setFormErr(''); setOriginalKode('') }}
           err={formErr}
           isEdit={mode === 'edit'}
+          originalKode={originalKode}
         />
       )}
 
@@ -317,14 +358,12 @@ export default function COAPage() {
                           <Save size={13} />
                         </button>
                       )}
-                      {/* Hapus: hanya akun custom baru (bukan standar) */}
-                      {custom && (
-                        <button
-                          className="btn btn-danger btn-sm p-1.5"
-                          onClick={() => handleDelete(a.kode)} title="Hapus akun">
-                          <Trash2 size={13} />
-                        </button>
-                      )}
+                      {/* Hapus: semua akun bisa dihapus (standar = dihide dari COA, custom = hapus permanen) */}
+                      <button
+                        className="btn btn-danger btn-sm p-1.5"
+                        onClick={() => handleDelete(a.kode)} title={custom ? 'Hapus akun' : 'Sembunyikan dari COA'}>
+                        <Trash2 size={13} />
+                      </button>
                     </div>
                   </td>
                 </tr>
@@ -344,8 +383,24 @@ export default function COAPage() {
       <div className="flex gap-4 mt-3 text-xs text-slate-400 no-print">
         <span><span className="bg-blue-100 text-blue-600 px-1 rounded">baru</span> = akun tambahan</span>
         <span><span className="bg-amber-100 text-amber-600 px-1 rounded">edit</span> = akun standar yang diubah</span>
-        <span><Pencil size={11} className="inline"/> = edit · <Trash2 size={11} className="inline"/> = hapus · <Save size={11} className="inline"/> = reset ke standar</span>
+        <span><Pencil size={11} className="inline"/> = edit kode/nama · <Trash2 size={11} className="inline"/> = hapus/sembunyikan · <Save size={11} className="inline"/> = reset ke standar</span>
       </div>
+
+      {/* Akun tersembunyi */}
+      {hiddenAkun.length > 0 && (
+        <div className="card p-4 mt-4 border-amber-200 bg-amber-50/30">
+          <p className="text-xs font-semibold text-amber-700 mb-2">⚠ Akun Disembunyikan ({hiddenAkun.length})</p>
+          <div className="flex flex-wrap gap-2">
+            {hiddenAkun.map(a => (
+              <div key={a.kode} className="flex items-center gap-1.5 bg-white border border-amber-200 rounded px-2 py-1 text-xs">
+                <span className="font-mono text-slate-600">{a.kode}</span>
+                <span className="text-slate-500">{a.nama.replace('__HIDDEN__', '')}</span>
+                <button className="text-emerald-600 hover:text-emerald-800 font-semibold ml-1" onClick={() => handleRestore(a.kode)} title="Tampilkan kembali">↩ Restore</button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

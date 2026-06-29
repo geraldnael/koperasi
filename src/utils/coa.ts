@@ -103,7 +103,10 @@ export function mergeCustomCOA(customCOA: Akun[]): Akun[] {
     if (idx >= 0) merged[idx] = ca
     else merged.push(ca)
   })
-  return merged.sort((a, b) => a.kode.localeCompare(b.kode, undefined, { numeric: true }))
+  // Filter akun yang disembunyikan (nama diawali '__HIDDEN__')
+  return merged
+    .filter(a => !a.nama.startsWith('__HIDDEN__'))
+    .sort((a, b) => a.kode.localeCompare(b.kode, undefined, { numeric: true }))
 }
 
 export function getAkunNama(kode: string): string {

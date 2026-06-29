@@ -1064,38 +1064,296 @@ export function PiutangSPPage() {
 }
 
 export function TokoPage() {
-  const { saldoAwal, jurnal, customCOA } = useAppStore()
-  const saldos = useMemo(() => computeSaldos(saldoAwal, jurnal, customCOA), [saldoAwal, jurnal, customCOA])
-  const penjualan = saldos['4.1.4'] ?? 0
-  const retur     = saldos['4.1.6'] ?? 0
-  const hpp       = saldos['5.1.1'] ?? 0
-  const piutangToko = saldos['1.1.6'] ?? 0
+  const { anggota, saldoToko, updateSaldoToko, jurnal, identitas } = useAppStore()
+
+  const [search,     setSearch]     = useState('')
+  const [page,       setPage]       = useState(1)
+  const [selectedId, setSelectedId] = useState<number | null>(null)
+  const [editSA,     setEditSA]     = useState<{id: number; val: string} | null>(null)
+  const perPage = 20
+
+  const saldoAwalMap = useMemo(() => {
+    const m: Record<string, number> = {}
+    anggota.forEach(a => {
+      const st = saldoToko.find(t => t.anggotaId === a.id)
+      m[a.nama.toLowerCase()] = st?.saldoAwal ?? 0
+    })
+    return m
+  }, [anggota, saldoToko])
+
+  const AKUN_PIUTANG_TOKO = '1.1.5'
+  const mutasi = useMemo(() => {
+    const result: Record<string, Record<number, { jual: number; bayar: number }>> = {}
+    jurnal.forEach(j => {
+      if (!j.tanggal) return
+      const bulan = new Date(j.tanggal).getMonth() + 1
+      j.rows.forEach(r => {
+        const nama = (r.ket || '').trim().toLowerCase()
+        if (!nama) return
+        const debet  = r.debet  || 0
+        const kredit = r.kredit || 0
+        if (!debet && !kredit) return
+        if (r.kode_d !== AKUN_PIUTANG_TOKO && r.kode_k !== AKUN_PIUTANG_TOKO) return
+        if (!result[nama]) result[nama] = {}
+        if (!result[nama][bulan]) result[nama][bulan] = { jual: 0, bayar: 0 }
+        if (r.kode_d === AKUN_PIUTANG_TOKO && debet > 0)  result[nama][bulan].jual  += debet
+        if (r.kode_k === AKUN_PIUTANG_TOKO && kredit > 0) result[nama][bulan].bayar += kredit
+      })
+    })
+    return result
+  }, [jurnal])
+
+  const rows = useMemo(() => anggota.map(a => {
+    const key       = a.nama.toLowerCase()
+    const saldoAwal = saldoAwalMap[key] ?? 0
+    const mut       = mutasi[key] ?? {}
+    const bulan: Record<number, { jual: number; bayar: number }> = {}
+    for (let b = 1; b <= 12; b++) bulan[b] = { jual: mut[b]?.jual ?? 0, bayar: mut[b]?.bayar ?? 0 }
+    const totalJual  = Object.values(bulan).reduce((s, b) => s + b.jual,  0)
+    const totalBayar = Object.values(bulan).reduce((s, b) => s + b.bayar, 0)
+    const saldoAkhir = saldoAwal + totalJual - totalBayar
+    const hasActivity = saldoAwal > 0 || totalJual > 0
+    return { id: a.id, nama: a.nama, saldoAwal, bulan, totalJual, totalBayar, saldoAkhir, hasActivity }
+  }), [anggota, saldoAwalMap, mutasi])
+
+  const filtered = useMemo(() =>
+    search ? rows.filter(r => r.nama.toLowerCase().includes(search.toLowerCase())) : rows,
+    [rows, search])
+
+  const totalPages = Math.ceil(filtered.length / perPage)
+  const paginated  = useMemo(() => filtered.slice((page-1)*perPage, page*perPage), [filtered, page, perPage])
+
+  const totals = useMemo(() => {
+    const t = { saldoAwal: 0, totalJual: 0, totalBayar: 0, saldoAkhir: 0,
+      bulan: {} as Record<number, { jual: number; bayar: number }> }
+    for (let b = 1; b <= 12; b++) t.bulan[b] = { jual: 0, bayar: 0 }
+    rows.forEach(r => {
+      t.saldoAwal  += r.saldoAwal
+      t.totalJual  += r.totalJual
+      t.totalBayar += r.totalBayar
+      t.saldoAkhir += r.saldoAkhir
+      for (let b = 1; b <= 12; b++) { t.bulan[b].jual += r.bulan[b].jual; t.bulan[b].bayar += r.bulan[b].bayar }
+    })
+    return t
+  }, [rows])
+
+  const selected = rows.find(r => r.id === selectedId) ?? null
+
+  const saveEditSA = (id: number) => {
+    if (!editSA || editSA.id !== id) return
+    const val = Math.max(0, Number(editSA.val.replace(/[^\d.]/g, '')) || 0)
+    updateSaldoToko(id, val)
+    setEditSA(null)
+  }
+
+  const EditableCell = ({ id, value }: { id: number; value: number }) => {
+    const isEditing = editSA?.id === id
+    if (isEditing) return (
+      <input className="input w-24 text-right text-[10px] p-1 font-mono" value={editSA!.val} autoFocus
+        type="number" min={0}
+        onChange={e => setEditSA({ id, val: e.target.value })}
+        onBlur={() => saveEditSA(id)}
+        onKeyDown={e => { if (e.key === 'Enter') saveEditSA(id); if (e.key === 'Escape') setEditSA(null) }} />
+    )
+    return (
+      <span className={`cursor-pointer hover:underline ${value ? 'text-slate-700 font-semibold' : 'text-slate-300 text-[9px]'}`}
+        onClick={() => setEditSA({ id, val: String(value) })}>
+        {value ? fmt(value) : 'ketik...'}
+      </span>
+    )
+  }
 
   return (
-    <div className="p-6 max-w-2xl">
-      <PageHeader title="Toko" subtitle="Buku pembantu transaksi penjualan barang koperasi" />
-      <div className="grid grid-cols-2 gap-3 mb-4">
-        <div className="card p-4">
-          <p className="text-xs text-slate-500 mb-1">Penjualan Kotor (4.1.4)</p>
-          <p className="text-lg font-bold text-emerald-700">Rp {fmt(penjualan)}</p>
-        </div>
-        <div className="card p-4">
-          <p className="text-xs text-slate-500 mb-1">Retur Penjualan (4.1.6)</p>
-          <p className="text-lg font-bold text-red-600">Rp {fmt(retur)}</p>
-        </div>
-        <div className="card p-4">
-          <p className="text-xs text-slate-500 mb-1">HPP Toko (5.1.1)</p>
-          <p className="text-lg font-bold text-amber-700">Rp {fmt(hpp)}</p>
-        </div>
-        <div className="card p-4">
-          <p className="text-xs text-slate-500 mb-1">Piutang Toko (1.1.5)</p>
-          <p className="text-lg font-bold text-blue-700">Rp {fmt(piutangToko)}</p>
-        </div>
+    <div style={{ padding: '24px', width: '100%', minWidth: 0 }}>
+      <PageHeader title="Piutang Toko"
+        subtitle="Buku pembantu piutang belanja anggota di toko koperasi" />
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+        {[
+          { l: 'Saldo Awal Piutang',  v: totals.saldoAwal,  c: 'text-blue-700'    },
+          { l: 'Total Penjualan',      v: totals.totalJual,  c: 'text-emerald-700' },
+          { l: 'Total Angsuran/Bayar', v: totals.totalBayar, c: 'text-amber-700'   },
+          { l: 'Saldo Akhir Piutang',  v: totals.saldoAkhir, c: 'text-indigo-700'  },
+        ].map(x => (
+          <div key={x.l} className="card p-3">
+            <p className="text-[10px] text-slate-500 mb-0.5">{x.l}</p>
+            <p className={`text-xs font-bold ${x.c}`}>{fmt(x.v)}</p>
+          </div>
+        ))}
       </div>
-      <div className="card p-4">
-        <p className="text-sm font-semibold text-slate-700 mb-1">Laba Kotor Toko</p>
-        <p className="text-xl font-bold text-blue-700">Rp {fmt(penjualan - retur - hpp)}</p>
-        <p className="text-xs text-slate-400 mt-1">Penjualan Neto − HPP</p>
+
+      <div className="bg-blue-50 border border-blue-200 text-blue-700 text-xs rounded-lg px-4 py-2 mb-4">
+        💡 <strong>Rumus:</strong> Saldo Akhir = Saldo Awal + Total Penjualan − Total Angsuran<br/>
+        Akun <strong>1.1.5 Piutang Toko</strong>: Debet = belanja baru · Kredit = bayar/angsuran. Keterangan = nama anggota.
+      </div>
+
+      {selected && (
+        <div className="card p-4 mb-4 border-2 border-blue-300 bg-blue-50/30 no-print">
+          <div className="flex justify-between items-center mb-3">
+            <p className="font-semibold text-slate-800">{selected.nama}</p>
+            <button className="btn btn-sm text-xs" onClick={() => setSelectedId(null)}>✕ Tutup</button>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs mb-3">
+            {[
+              { l: 'Saldo Awal',  v: selected.saldoAwal,  c: 'text-blue-700'    },
+              { l: 'Total Jual',  v: selected.totalJual,  c: 'text-emerald-700' },
+              { l: 'Total Bayar', v: selected.totalBayar, c: 'text-amber-700'   },
+              { l: 'Saldo Akhir', v: selected.saldoAkhir, c: 'text-indigo-700'  },
+            ].map(x => (
+              <div key={x.l} className="bg-white rounded p-2 text-center border">
+                <p className="text-slate-400 text-[9px] mb-0.5">{x.l}</p>
+                <p className={`font-semibold ${x.c}`}>{fmt(x.v)}</p>
+              </div>
+            ))}
+          </div>
+          <table className="w-full text-xs border-collapse">
+            <thead>
+              <tr className="bg-slate-100">
+                <th className="th w-12">Bulan</th>
+                <th className="th text-right">Penjualan (Belanja)</th>
+                <th className="th text-right">Angsuran/Bayar</th>
+                <th className="th text-right">Net</th>
+              </tr>
+            </thead>
+            <tbody>
+              {BULAN_LABEL.map((lb, idx) => {
+                const b = idx + 1; const bm = selected.bulan[b]; const net = bm.jual - bm.bayar
+                return (
+                  <tr key={b} className={`border-b border-slate-100 ${(bm.jual||bm.bayar) ? 'bg-emerald-50/40' : ''}`}>
+                    <td className="td font-medium">{lb}</td>
+                    <td className={`td-num ${bm.jual ? 'text-emerald-700 font-semibold' : 'text-slate-300'}`}>{bm.jual ? fmt(bm.jual) : '—'}</td>
+                    <td className={`td-num ${bm.bayar ? 'text-amber-700 font-semibold' : 'text-slate-300'}`}>{bm.bayar ? fmt(bm.bayar) : '—'}</td>
+                    <td className={`td-num font-semibold ${net > 0 ? 'text-indigo-700' : net < 0 ? 'text-red-600' : 'text-slate-300'}`}>{net ? fmt(net) : '—'}</td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <div className="flex flex-wrap gap-3 items-center mb-3 no-print">
+        <input className="input max-w-xs" placeholder="Cari nama anggota..."
+          value={search} onChange={e => { setSearch(e.target.value); setPage(1) }} />
+        <span className="text-xs text-slate-400">{filtered.length} anggota</span>
+        <div className="flex items-center gap-1 ml-auto">
+          <button className="btn btn-sm px-2" disabled={page<=1} onClick={() => setPage(p => p-1)}>‹</button>
+          <span className="text-xs text-slate-600 px-2">Hal {page} / {totalPages}</span>
+          <button className="btn btn-sm px-2" disabled={page>=totalPages} onClick={() => setPage(p => p+1)}>›</button>
+        </div>
+        <button className="btn btn-sm" onClick={() => printElement('toko-print-area', 'Buku Pembantu Piutang Toko', identitas.nama)}>
+          🖨️ Cetak
+        </button>
+      </div>
+
+      <div id="toko-print-area">
+        <div className="mb-2 text-center">
+          <h2 className="text-sm font-bold text-slate-700">REKAPITULASI PIUTANG TOKO ANGGOTA</h2>
+          <p className="text-xs text-slate-500">{identitas.nama || 'KOPERASI'} — {identitas.akhir ? `Per ${identitas.akhir}` : `Tahun ${identitas.tahun}`}</p>
+        </div>
+
+        <div style={{ overflowX: 'scroll', width: '100%', borderRadius: '12px', border: '1px solid #e2e8f0', background: 'white' }}>
+          <table className="text-[10px] border-collapse" style={{ width: 'max-content', tableLayout: 'fixed' }}>
+            <thead>
+              <tr className="bg-slate-700 text-white">
+                <th className="th border border-slate-500 text-white text-center" rowSpan={2} style={{ width: '28px' }}>NO</th>
+                <th className="th border border-slate-500 text-white" rowSpan={2} style={{ width: '160px' }}>NAMA</th>
+                <th className="th border border-slate-500 text-white text-center bg-blue-800" rowSpan={2} style={{ width: '82px' }}>SALDO PIUTANG TOKO</th>
+                {BULAN_LABEL.map(lb => (
+                  <th key={lb} className="th border border-slate-500 text-white text-center" colSpan={2} style={{ width: '100px' }}>{lb.toUpperCase()}</th>
+                ))}
+                <th className="th border border-slate-500 text-white text-center bg-indigo-700" rowSpan={2} style={{ width: '82px' }}>PIUTANG TOKO</th>
+                <th className="th border border-slate-500 text-white text-center bg-emerald-700" rowSpan={2} style={{ width: '82px' }}>TOTAL PENJUALAN</th>
+              </tr>
+              <tr className="bg-slate-600 text-white text-[9px]">
+                {BULAN_LABEL.map(lb => (
+                  <React.Fragment key={lb}>
+                    <th className="th border border-slate-500 text-white text-right" style={{ width: '50px' }}>JUAL</th>
+                    <th className="th border border-slate-500 text-white text-right" style={{ width: '50px' }}>BAYAR</th>
+                  </React.Fragment>
+                ))}
+              </tr>
+              <tr className="bg-amber-50 font-semibold text-[10px] border-b-2 border-slate-400">
+                <td className="td border border-slate-200" colSpan={2}>TOTAL ({rows.length} anggota)</td>
+                <td className="td-num border border-slate-200 text-blue-700 font-bold">{fmt(totals.saldoAwal)}</td>
+                {Array.from({ length: 12 }, (_, i) => i + 1).map(b => (
+                  <React.Fragment key={b}>
+                    <td className={`td-num border border-slate-200 ${totals.bulan[b].jual ? 'text-emerald-700' : 'text-slate-300'}`}>{totals.bulan[b].jual ? fmt(totals.bulan[b].jual) : '—'}</td>
+                    <td className={`td-num border border-slate-200 ${totals.bulan[b].bayar ? 'text-amber-700' : 'text-slate-300'}`}>{totals.bulan[b].bayar ? fmt(totals.bulan[b].bayar) : '—'}</td>
+                  </React.Fragment>
+                ))}
+                <td className="td-num border border-slate-200 text-indigo-700 font-bold">{fmt(totals.saldoAkhir)}</td>
+                <td className="td-num border border-slate-200 text-emerald-700 font-bold">{fmt(totals.totalJual)}</td>
+              </tr>
+            </thead>
+            <tbody>
+              {paginated.map((r, i) => {
+                const no = (page - 1) * perPage + i + 1
+                const isSel = r.id === selectedId
+                return (
+                  <tr key={r.id}
+                    className={`border-b border-slate-100 cursor-pointer transition-colors
+                      ${isSel ? 'bg-blue-100' : r.hasActivity ? 'hover:bg-blue-50/30 bg-blue-50/10' : 'hover:bg-slate-50'}`}
+                    onClick={() => setSelectedId(isSel ? null : r.id)}>
+                    <td className="td text-slate-400 border border-slate-100 text-center">{no}</td>
+                    <td className="td border border-slate-100 font-medium">
+                      {r.nama}
+                      {r.hasActivity && <span className="ml-1 text-[8px] bg-blue-100 text-blue-600 px-1 rounded no-print">aktif</span>}
+                    </td>
+                    <td className="td-num border border-slate-100" onClick={e => e.stopPropagation()}>
+                      <EditableCell id={r.id} value={r.saldoAwal} />
+                    </td>
+                    {Array.from({ length: 12 }, (_, idx) => idx + 1).map(b => (
+                      <React.Fragment key={b}>
+                        <td className={`td-num border border-slate-100 ${r.bulan[b].jual ? 'text-emerald-700 font-semibold' : 'text-slate-200'}`}>{r.bulan[b].jual ? fmt(r.bulan[b].jual) : '—'}</td>
+                        <td className={`td-num border border-slate-100 ${r.bulan[b].bayar ? 'text-amber-700 font-semibold' : 'text-slate-200'}`}>{r.bulan[b].bayar ? fmt(r.bulan[b].bayar) : '—'}</td>
+                      </React.Fragment>
+                    ))}
+                    <td className={`td-num border border-slate-100 font-bold ${r.saldoAkhir > 0 ? 'text-indigo-700' : r.saldoAkhir < 0 ? 'text-red-600' : 'text-slate-200'}`}>
+                      {r.saldoAkhir !== 0 ? fmt(r.saldoAkhir) : '—'}
+                    </td>
+                    <td className={`td-num border border-slate-100 font-semibold ${r.totalJual ? 'text-emerald-700' : 'text-slate-200'}`}>
+                      {r.totalJual ? fmt(r.totalJual) : '—'}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+            <tfoot>
+              <tr className="bg-slate-700 text-white font-bold text-[10px]">
+                <td className="td border border-slate-500" colSpan={2}>JUMLAH TOTAL</td>
+                <td className="td-num border border-slate-500">{fmt(totals.saldoAwal)}</td>
+                {Array.from({ length: 12 }, (_, i) => i + 1).map(b => (
+                  <React.Fragment key={b}>
+                    <td className="td-num border border-slate-500">{totals.bulan[b].jual ? fmt(totals.bulan[b].jual) : '—'}</td>
+                    <td className="td-num border border-slate-500">{totals.bulan[b].bayar ? fmt(totals.bulan[b].bayar) : '—'}</td>
+                  </React.Fragment>
+                ))}
+                <td className="td-num border border-slate-500">{fmt(totals.saldoAkhir)}</td>
+                <td className="td-num border border-slate-500">{fmt(totals.totalJual)}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+
+        <div className="flex justify-between items-center mt-3 no-print">
+          <span className="text-xs text-slate-400">
+            Menampilkan {(page-1)*perPage+1}–{Math.min(page*perPage, filtered.length)} dari {filtered.length} anggota
+          </span>
+          <div className="flex gap-1">
+            <button className="btn btn-sm px-2" disabled={page<=1} onClick={() => setPage(1)}>«</button>
+            <button className="btn btn-sm px-2" disabled={page<=1} onClick={() => setPage(p => p-1)}>‹</button>
+            {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+              const pg = Math.max(1, Math.min(totalPages-4, page-2)) + i
+              return <button key={pg} className={`btn btn-sm px-2.5 ${pg===page ? 'btn-primary' : ''}`} onClick={() => setPage(pg)}>{pg}</button>
+            })}
+            <button className="btn btn-sm px-2" disabled={page>=totalPages} onClick={() => setPage(p => p+1)}>›</button>
+            <button className="btn btn-sm px-2" disabled={page>=totalPages} onClick={() => setPage(totalPages)}>»</button>
+          </div>
+        </div>
+        <p className="text-xs text-slate-400 mt-2 no-print">
+          💡 Klik baris untuk detail per bulan. Klik saldo awal untuk edit langsung.
+        </p>
       </div>
     </div>
   )
