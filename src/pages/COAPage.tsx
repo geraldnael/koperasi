@@ -7,7 +7,6 @@ import { PageHeader } from '../components/ui'
 import type { Akun, TipeAkun, SaldoNormal } from '../types'
 
 // ── Akun custom disimpan di localStorage ──────────────────────────────────
-const CUSTOM_KEY = 'sia-koperasi-custom-coa'
 const GRUP_OPTIONS: TipeAkun[] = ['ASET','KEWAJIBAN','EKUITAS','PENDAPATAN','BEBAN']
 
 const emptyForm = (): Akun => ({ kode: '', nama: '', kelompok: '', grup: 'ASET', tipe: 'D' })
