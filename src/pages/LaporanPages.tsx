@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { useAppStore } from '../store/useAppStore'
 import { computeSaldos, calcNeraca, calcSHU, fmt } from '../utils/accounting'
-import { mergeCustomCOA, getAkunNama } from '../utils/coa'
+import { mergeCustomCOA,} from '../utils/coa'
 import type { Akun } from '../types'
 import { PageHeader, PrintButton, DownloadButton, LapRow, LapHeader } from '../components/ui'
 import { exportNeraca, exportSHU } from '../utils/exportExcel'
