@@ -1063,8 +1063,16 @@ export function PiutangSPPage() {
   )
 }
 
+// ─────────────────────────────────────────────────────────────────────────
+// TokoPage — Buku Pembantu Piutang Toko per Anggota
+// Format: NO | NAMA | SALDO PIUTANG TOKO | PENJUALAN Jan–Des | PIUTANG TOKO | TOTAL PENJUALAN
+// Saldo Akhir Piutang Toko = Saldo Awal + Total Penjualan (belanja) - Total Angsuran
+// Akun terkait: 1.1.5 Piutang Toko (D), 4.1.4 Penjualan Toko (K)
+// ─────────────────────────────────────────────────────────────────────────
 export function TokoPage() {
-  const { anggota, saldoToko, updateSaldoToko, jurnal, identitas } = useAppStore()
+  const { anggota, saldoToko, updateSaldoToko, jurnal, identitas, saldoAwal, customCOA } = useAppStore()
+  const saldos = useMemo(() => computeSaldos(saldoAwal, jurnal, customCOA), [saldoAwal, jurnal, customCOA])
+  const nilaiPiutangToko = saldos['1.1.5'] ?? 0
 
   const [search,     setSearch]     = useState('')
   const [page,       setPage]       = useState(1)
@@ -1072,6 +1080,7 @@ export function TokoPage() {
   const [editSA,     setEditSA]     = useState<{id: number; val: string} | null>(null)
   const perPage = 20
 
+  // Saldo awal per anggota (dari store)
   const saldoAwalMap = useMemo(() => {
     const m: Record<string, number> = {}
     anggota.forEach(a => {
@@ -1081,6 +1090,9 @@ export function TokoPage() {
     return m
   }, [anggota, saldoToko])
 
+  // Hitung mutasi piutang toko per anggota per bulan dari jurnal
+  // Penjualan (belanja): Debet 1.1.5 (piutang toko bertambah)
+  // Angsuran/bayar: Kredit 1.1.5 (piutang toko berkurang)
   const AKUN_PIUTANG_TOKO = '1.1.5'
   const mutasi = useMemo(() => {
     const result: Record<string, Record<number, { jual: number; bayar: number }>> = {}
@@ -1093,26 +1105,34 @@ export function TokoPage() {
         const debet  = r.debet  || 0
         const kredit = r.kredit || 0
         if (!debet && !kredit) return
+        // Hanya proses akun piutang toko
         if (r.kode_d !== AKUN_PIUTANG_TOKO && r.kode_k !== AKUN_PIUTANG_TOKO) return
         if (!result[nama]) result[nama] = {}
         if (!result[nama][bulan]) result[nama][bulan] = { jual: 0, bayar: 0 }
-        if (r.kode_d === AKUN_PIUTANG_TOKO && debet > 0)  result[nama][bulan].jual  += debet
+        if (r.kode_d === AKUN_PIUTANG_TOKO && debet > 0) result[nama][bulan].jual  += debet
         if (r.kode_k === AKUN_PIUTANG_TOKO && kredit > 0) result[nama][bulan].bayar += kredit
       })
     })
     return result
   }, [jurnal])
 
+  // Gabungkan per anggota
   const rows = useMemo(() => anggota.map(a => {
-    const key       = a.nama.toLowerCase()
+    const key      = a.nama.toLowerCase()
     const saldoAwal = saldoAwalMap[key] ?? 0
-    const mut       = mutasi[key] ?? {}
+    const mut      = mutasi[key] ?? {}
+
     const bulan: Record<number, { jual: number; bayar: number }> = {}
-    for (let b = 1; b <= 12; b++) bulan[b] = { jual: mut[b]?.jual ?? 0, bayar: mut[b]?.bayar ?? 0 }
+    for (let b = 1; b <= 12; b++) {
+      bulan[b] = { jual: mut[b]?.jual ?? 0, bayar: mut[b]?.bayar ?? 0 }
+    }
+
     const totalJual  = Object.values(bulan).reduce((s, b) => s + b.jual,  0)
     const totalBayar = Object.values(bulan).reduce((s, b) => s + b.bayar, 0)
-    const saldoAkhir = saldoAwal + totalJual - totalBayar
-    const hasActivity = saldoAwal > 0 || totalJual > 0
+    // Saldo Akhir = Saldo Awal + Total Penjualan (belanja) - Total Angsuran
+    const saldoAkhir   = saldoAwal + totalJual - totalBayar
+    const hasActivity  = saldoAwal > 0 || totalJual > 0
+
     return { id: a.id, nama: a.nama, saldoAwal, bulan, totalJual, totalBayar, saldoAkhir, hasActivity }
   }), [anggota, saldoAwalMap, mutasi])
 
@@ -1123,6 +1143,7 @@ export function TokoPage() {
   const totalPages = Math.ceil(filtered.length / perPage)
   const paginated  = useMemo(() => filtered.slice((page-1)*perPage, page*perPage), [filtered, page, perPage])
 
+  // Totals
   const totals = useMemo(() => {
     const t = { saldoAwal: 0, totalJual: 0, totalBayar: 0, saldoAkhir: 0,
       bulan: {} as Record<number, { jual: number; bayar: number }> }
@@ -1132,7 +1153,10 @@ export function TokoPage() {
       t.totalJual  += r.totalJual
       t.totalBayar += r.totalBayar
       t.saldoAkhir += r.saldoAkhir
-      for (let b = 1; b <= 12; b++) { t.bulan[b].jual += r.bulan[b].jual; t.bulan[b].bayar += r.bulan[b].bayar }
+      for (let b = 1; b <= 12; b++) {
+        t.bulan[b].jual  += r.bulan[b].jual
+        t.bulan[b].bayar += r.bulan[b].bayar
+      }
     })
     return t
   }, [rows])
@@ -1168,12 +1192,22 @@ export function TokoPage() {
       <PageHeader title="Piutang Toko"
         subtitle="Buku pembantu piutang belanja anggota di toko koperasi" />
 
+      {/* Nilai akun 1.1.5 dari Buku Besar */}
+      <div className="bg-indigo-50 border border-indigo-200 rounded-lg px-4 py-3 mb-4 flex items-center justify-between">
+        <div>
+          <p className="text-xs text-indigo-600 font-semibold">1.1.5 — Piutang Toko (Nilai di Posisi Keuangan)</p>
+          <p className="text-xl font-bold text-indigo-700">Rp {fmt(nilaiPiutangToko)}</p>
+        </div>
+        <p className="text-xs text-indigo-400">Saldo bersih akun dari Jurnal Umum</p>
+      </div>
+
+      {/* Summary cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
         {[
-          { l: 'Saldo Awal Piutang',  v: totals.saldoAwal,  c: 'text-blue-700'    },
-          { l: 'Total Penjualan',      v: totals.totalJual,  c: 'text-emerald-700' },
-          { l: 'Total Angsuran/Bayar', v: totals.totalBayar, c: 'text-amber-700'   },
-          { l: 'Saldo Akhir Piutang',  v: totals.saldoAkhir, c: 'text-indigo-700'  },
+          { l: 'Saldo Awal Piutang',   v: totals.saldoAwal,  c: 'text-blue-700'    },
+          { l: 'Total Penjualan',       v: totals.totalJual,  c: 'text-emerald-700' },
+          { l: 'Total Angsuran/Bayar',  v: totals.totalBayar, c: 'text-amber-700'   },
+          { l: 'Saldo Akhir Piutang',   v: totals.saldoAkhir, c: 'text-indigo-700'  },
         ].map(x => (
           <div key={x.l} className="card p-3">
             <p className="text-[10px] text-slate-500 mb-0.5">{x.l}</p>
@@ -1183,10 +1217,12 @@ export function TokoPage() {
       </div>
 
       <div className="bg-blue-50 border border-blue-200 text-blue-700 text-xs rounded-lg px-4 py-2 mb-4">
-        💡 <strong>Rumus:</strong> Saldo Akhir = Saldo Awal + Total Penjualan − Total Angsuran<br/>
-        Akun <strong>1.1.5 Piutang Toko</strong>: Debet = belanja baru · Kredit = bayar/angsuran. Keterangan = nama anggota.
+        💡 <strong>Rumus:</strong> Saldo Akhir Piutang Toko = Saldo Awal + Total Penjualan − Total Angsuran<br/>
+        Akun <strong>1.1.5 Piutang Toko</strong>: Debet = belanja baru · Kredit = bayar/angsuran.<br/>
+        Klik <strong>Saldo Awal</strong> untuk edit. Kolom bulan otomatis dari Jurnal Umum.
       </div>
 
+      {/* Detail anggota terpilih */}
       {selected && (
         <div className="card p-4 mb-4 border-2 border-blue-300 bg-blue-50/30 no-print">
           <div className="flex justify-between items-center mb-3">
@@ -1195,10 +1231,10 @@ export function TokoPage() {
           </div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs mb-3">
             {[
-              { l: 'Saldo Awal',  v: selected.saldoAwal,  c: 'text-blue-700'    },
-              { l: 'Total Jual',  v: selected.totalJual,  c: 'text-emerald-700' },
-              { l: 'Total Bayar', v: selected.totalBayar, c: 'text-amber-700'   },
-              { l: 'Saldo Akhir', v: selected.saldoAkhir, c: 'text-indigo-700'  },
+              { l: 'Saldo Awal',    v: selected.saldoAwal,  c: 'text-blue-700'    },
+              { l: 'Total Jual',    v: selected.totalJual,  c: 'text-emerald-700' },
+              { l: 'Total Bayar',   v: selected.totalBayar, c: 'text-amber-700'   },
+              { l: 'Saldo Akhir',   v: selected.saldoAkhir, c: 'text-indigo-700'  },
             ].map(x => (
               <div key={x.l} className="bg-white rounded p-2 text-center border">
                 <p className="text-slate-400 text-[9px] mb-0.5">{x.l}</p>
@@ -1217,7 +1253,9 @@ export function TokoPage() {
             </thead>
             <tbody>
               {BULAN_LABEL.map((lb, idx) => {
-                const b = idx + 1; const bm = selected.bulan[b]; const net = bm.jual - bm.bayar
+                const b = idx + 1
+                const bm = selected.bulan[b]
+                const net = bm.jual - bm.bayar
                 return (
                   <tr key={b} className={`border-b border-slate-100 ${(bm.jual||bm.bayar) ? 'bg-emerald-50/40' : ''}`}>
                     <td className="td font-medium">{lb}</td>
@@ -1232,6 +1270,7 @@ export function TokoPage() {
         </div>
       )}
 
+      {/* Toolbar */}
       <div className="flex flex-wrap gap-3 items-center mb-3 no-print">
         <input className="input max-w-xs" placeholder="Cari nama anggota..."
           value={search} onChange={e => { setSearch(e.target.value); setPage(1) }} />
@@ -1246,6 +1285,7 @@ export function TokoPage() {
         </button>
       </div>
 
+      {/* Tabel utama */}
       <div id="toko-print-area">
         <div className="mb-2 text-center">
           <h2 className="text-sm font-bold text-slate-700">REKAPITULASI PIUTANG TOKO ANGGOTA</h2>
@@ -1273,13 +1313,18 @@ export function TokoPage() {
                   </React.Fragment>
                 ))}
               </tr>
+              {/* Row total di atas */}
               <tr className="bg-amber-50 font-semibold text-[10px] border-b-2 border-slate-400">
                 <td className="td border border-slate-200" colSpan={2}>TOTAL ({rows.length} anggota)</td>
                 <td className="td-num border border-slate-200 text-blue-700 font-bold">{fmt(totals.saldoAwal)}</td>
                 {Array.from({ length: 12 }, (_, i) => i + 1).map(b => (
                   <React.Fragment key={b}>
-                    <td className={`td-num border border-slate-200 ${totals.bulan[b].jual ? 'text-emerald-700' : 'text-slate-300'}`}>{totals.bulan[b].jual ? fmt(totals.bulan[b].jual) : '—'}</td>
-                    <td className={`td-num border border-slate-200 ${totals.bulan[b].bayar ? 'text-amber-700' : 'text-slate-300'}`}>{totals.bulan[b].bayar ? fmt(totals.bulan[b].bayar) : '—'}</td>
+                    <td className={`td-num border border-slate-200 ${totals.bulan[b].jual ? 'text-emerald-700' : 'text-slate-300'}`}>
+                      {totals.bulan[b].jual ? fmt(totals.bulan[b].jual) : '—'}
+                    </td>
+                    <td className={`td-num border border-slate-200 ${totals.bulan[b].bayar ? 'text-amber-700' : 'text-slate-300'}`}>
+                      {totals.bulan[b].bayar ? fmt(totals.bulan[b].bayar) : '—'}
+                    </td>
                   </React.Fragment>
                 ))}
                 <td className="td-num border border-slate-200 text-indigo-700 font-bold">{fmt(totals.saldoAkhir)}</td>
@@ -1305,8 +1350,12 @@ export function TokoPage() {
                     </td>
                     {Array.from({ length: 12 }, (_, idx) => idx + 1).map(b => (
                       <React.Fragment key={b}>
-                        <td className={`td-num border border-slate-100 ${r.bulan[b].jual ? 'text-emerald-700 font-semibold' : 'text-slate-200'}`}>{r.bulan[b].jual ? fmt(r.bulan[b].jual) : '—'}</td>
-                        <td className={`td-num border border-slate-100 ${r.bulan[b].bayar ? 'text-amber-700 font-semibold' : 'text-slate-200'}`}>{r.bulan[b].bayar ? fmt(r.bulan[b].bayar) : '—'}</td>
+                        <td className={`td-num border border-slate-100 ${r.bulan[b].jual ? 'text-emerald-700 font-semibold' : 'text-slate-200'}`}>
+                          {r.bulan[b].jual ? fmt(r.bulan[b].jual) : '—'}
+                        </td>
+                        <td className={`td-num border border-slate-100 ${r.bulan[b].bayar ? 'text-amber-700 font-semibold' : 'text-slate-200'}`}>
+                          {r.bulan[b].bayar ? fmt(r.bulan[b].bayar) : '—'}
+                        </td>
                       </React.Fragment>
                     ))}
                     <td className={`td-num border border-slate-100 font-bold ${r.saldoAkhir > 0 ? 'text-indigo-700' : r.saldoAkhir < 0 ? 'text-red-600' : 'text-slate-200'}`}>
