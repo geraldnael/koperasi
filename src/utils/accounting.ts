@@ -146,7 +146,7 @@ export function calcNeraca(saldos: Record<string, number>, shuBersih?: number) {
   const sum = (ks: string[]) => ks.reduce((a, k) => a + r(k), 0)
 
   const kasBank         = sum(['1.1.1','1.1.2'])
-  const piutangBruto    = sum(['1.1.4','1.1.5'])
+  const piutangBruto    = sum(['1.1.4','1.1.5','1.1.6'])
   const penyisihan      = r('1.1.7')
   const piutangNeto     = piutangBruto - penyisihan
   const persediaan      = r('1.1.8') + r('1.1.9') - r('1.1.10') + r('1.1.11')

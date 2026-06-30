@@ -282,8 +282,8 @@ export function ArusKasPage() {
   const penToko         = K('4.1.4')
   const penKons         = K('4.1.5')
   const piutangSP       = K('1.1.4')
-  const piutangToko     = K('1.1.5')
-  const piutangJasa     = K('1.1.3')
+  const piutangToko     = K('1.1.6')
+  const piutangJasa     = K('1.1.5')
   const penarikanBank   = K('1.1.2')
   const pendYMH         = K('1.1.8')
   const tambahSukarela  = K('2.1.9')
@@ -367,8 +367,8 @@ export function ArusKasPage() {
         <LapRow label="4.1.4 — Penjualan Toko"                  value={penToko}         indent={1} />
         <LapRow label="4.1.5 — Pendapatan Konsinyasi"           value={penKons}         indent={1} />
         <LapRow label="1.1.4 — Piutang Simpan Pinjam"           value={piutangSP}       indent={1} />
-        <LapRow label="1.1.5 — Piutang Toko"                    value={piutangToko}     indent={1} />
-        <LapRow label="1.1.3 — Piutang Jasa Lain"               value={piutangJasa}     indent={1} />
+        <LapRow label="1.1.6 — Piutang Toko"                    value={piutangToko}     indent={1} />
+        <LapRow label="1.1.5 — Piutang Jasa Lain"               value={piutangJasa}     indent={1} />
         <LapRow label="1.1.2 — Penarikan dari Bank"             value={penarikanBank}   indent={1} />
         <LapRow label="1.1.8 — Pendapatan YMH Diterima"         value={pendYMH}         indent={1} />
         <LapRow label="2.1.9 — Penambahan Simpanan Sukarela"    value={tambahSukarela}  indent={1} />

@@ -1067,12 +1067,12 @@ export function PiutangSPPage() {
 // TokoPage — Buku Pembantu Piutang Toko per Anggota
 // Format: NO | NAMA | SALDO PIUTANG TOKO | PENJUALAN Jan–Des | PIUTANG TOKO | TOTAL PENJUALAN
 // Saldo Akhir Piutang Toko = Saldo Awal + Total Penjualan (belanja) - Total Angsuran
-// Akun terkait: 1.1.5 Piutang Toko (D), 4.1.4 Penjualan Toko (K)
+// Akun terkait: 1.1.6 Piutang Toko (D), 4.1.4 Penjualan Toko (K)
 // ─────────────────────────────────────────────────────────────────────────
 export function TokoPage() {
   const { anggota, saldoToko, updateSaldoToko, jurnal, identitas, saldoAwal, customCOA } = useAppStore()
   const saldos = useMemo(() => computeSaldos(saldoAwal, jurnal, customCOA), [saldoAwal, jurnal, customCOA])
-  const nilaiPiutangToko = saldos['1.1.5'] ?? 0
+  const nilaiPiutangToko = saldos['1.1.6'] ?? 0
 
   const [search,     setSearch]     = useState('')
   const [page,       setPage]       = useState(1)
@@ -1091,9 +1091,9 @@ export function TokoPage() {
   }, [anggota, saldoToko])
 
   // Hitung mutasi piutang toko per anggota per bulan dari jurnal
-  // Penjualan (belanja): Debet 1.1.5 (piutang toko bertambah)
-  // Angsuran/bayar: Kredit 1.1.5 (piutang toko berkurang)
-  const AKUN_PIUTANG_TOKO = '1.1.5'
+  // Penjualan (belanja): Debet 1.1.6 (piutang toko bertambah)
+  // Angsuran/bayar: Kredit 1.1.6 (piutang toko berkurang)
+  const AKUN_PIUTANG_TOKO = '1.1.6'
   const mutasi = useMemo(() => {
     const result: Record<string, Record<number, { jual: number; bayar: number }>> = {}
     jurnal.forEach(j => {
@@ -1192,10 +1192,10 @@ export function TokoPage() {
       <PageHeader title="Piutang Toko"
         subtitle="Buku pembantu piutang belanja anggota di toko koperasi" />
 
-      {/* Nilai akun 1.1.5 dari Buku Besar */}
+      {/* Nilai akun 1.1.6 dari Buku Besar */}
       <div className="bg-indigo-50 border border-indigo-200 rounded-lg px-4 py-3 mb-4 flex items-center justify-between">
         <div>
-          <p className="text-xs text-indigo-600 font-semibold">1.1.5 — Piutang Toko (Nilai di Posisi Keuangan)</p>
+          <p className="text-xs text-indigo-600 font-semibold">1.1.6 — Piutang Toko (Nilai di Posisi Keuangan)</p>
           <p className="text-xl font-bold text-indigo-700">Rp {fmt(nilaiPiutangToko)}</p>
         </div>
         <p className="text-xs text-indigo-400">Saldo bersih akun dari Jurnal Umum</p>
@@ -1218,7 +1218,7 @@ export function TokoPage() {
 
       <div className="bg-blue-50 border border-blue-200 text-blue-700 text-xs rounded-lg px-4 py-2 mb-4">
         💡 <strong>Rumus:</strong> Saldo Akhir Piutang Toko = Saldo Awal + Total Penjualan − Total Angsuran<br/>
-        Akun <strong>1.1.5 Piutang Toko</strong>: Debet = belanja baru · Kredit = bayar/angsuran.<br/>
+        Akun <strong>1.1.6 Piutang Toko</strong>: Debet = belanja baru · Kredit = bayar/angsuran.<br/>
         Klik <strong>Saldo Awal</strong> untuk edit. Kolom bulan otomatis dari Jurnal Umum.
       </div>
 
