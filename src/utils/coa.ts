@@ -12,7 +12,7 @@ export const COA: Akun[] = [
   { kode:'1.1.8',  nama:'Persediaan Barang',                kelompok:'Aset Lancar',     grup:'ASET',      tipe:'D' },
   { kode:'1.1.9',  nama:'Persediaan Lain-lain',             kelompok:'Aset Lancar',     grup:'ASET',      tipe:'D' },
   { kode:'1.1.10', nama:'Biaya dibayar dimuka',             kelompok:'Aset Lancar',     grup:'ASET',      tipe:'D' },
-  { kode:'2.1.15', nama:'Pendapatan diterima dimuka',       kelompok:'Kewajiban Jk. Pendek', grup:'KEWAJIBAN', tipe:'K' },
+  { kode:'1.1.11', nama:'Pendapatan diterima dimuka',       kelompok:'Aset Lancar',     grup:'ASET',      tipe:'K' },
   { kode:'1.1.12', nama:'Aset lancar lainnya',              kelompok:'Aset Lancar',     grup:'ASET',      tipe:'D' },
   // ══ ASET TIDAK LANCAR ══
   { kode:'1.2.1',  nama:'Penyertaan di PKPRI',              kelompok:'Aset Tidak Lancar', grup:'ASET',    tipe:'D' },
@@ -67,6 +67,7 @@ export const COA: Akun[] = [
   // ══ PENDAPATAN NON-USAHA ══
   { kode:'4.2.1',  nama:'Pendapatan bunga bank',            kelompok:'Pendapatan Non-Usaha', grup:'PENDAPATAN', tipe:'K' },
   { kode:'4.2.2',  nama:'Keuntungan penjualan aset tetap',  kelompok:'Pendapatan Non-Usaha', grup:'PENDAPATAN', tipe:'K' },
+  { kode:'4.2.3',  nama:'Keuntungan di luar usaha lainnya', kelompok:'Pendapatan Non-Usaha', grup:'PENDAPATAN', tipe:'K' },
   // ══ BEBAN ══
   { kode:'5.1.1',  nama:'HPP Toko',                                          kelompok:'Beban', grup:'BEBAN', tipe:'D' },
   { kode:'5.1.2',  nama:'Beban Jasa Simpanan Sukarela',                      kelompok:'Beban', grup:'BEBAN', tipe:'D' },
@@ -91,6 +92,10 @@ export const COA: Akun[] = [
   { kode:'5.1.21', nama:'Beban pendidikan perkoperasian',                    kelompok:'Beban', grup:'BEBAN', tipe:'D' },
   { kode:'5.1.22', nama:'Beban Rapat anggota',                               kelompok:'Beban', grup:'BEBAN', tipe:'D' },
   { kode:'5.1.23', nama:'Beban perkoperasian lainnya',                       kelompok:'Beban', grup:'BEBAN', tipe:'D' },
+  // ══ BEBAN NON-USAHA ══
+  { kode:'5.2.1',  nama:'Beban administrasi bank',                           kelompok:'Beban Non-Usaha', grup:'BEBAN', tipe:'D' },
+  { kode:'5.2.2',  nama:'Beban pajak bunga',                                 kelompok:'Beban Non-Usaha', grup:'BEBAN', tipe:'D' },
+  { kode:'5.2.3',  nama:'Beban di luar usaha lainnya',                       kelompok:'Beban Non-Usaha', grup:'BEBAN', tipe:'D' },
 ]
 
 // Helper: cari nama akun berdasarkan kode

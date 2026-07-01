@@ -1067,7 +1067,7 @@ export function PiutangSPPage() {
 // TokoPage — Buku Pembantu Piutang Toko per Anggota
 // Format: NO | NAMA | SALDO PIUTANG TOKO | PENJUALAN Jan–Des | PIUTANG TOKO | TOTAL PENJUALAN
 // Saldo Akhir Piutang Toko = Saldo Awal + Total Penjualan (belanja) - Total Angsuran
-// Akun terkait: 1.1.6 Piutang Toko (D), 4.1.4 Penjualan Toko (K)
+// Akun terkait: 1.1.6 Piutang Toko (D), 4.1.5 Penjualan Toko (K)
 // ─────────────────────────────────────────────────────────────────────────
 export function TokoPage() {
   const { anggota, saldoToko, updateSaldoToko, jurnal, identitas, saldoAwal, customCOA } = useAppStore()

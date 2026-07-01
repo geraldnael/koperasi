@@ -287,7 +287,7 @@ export function ArusKasPage() {
   const piutangToko     = K('1.1.6')
   const piutangJasa     = K('1.1.5')
   const penarikanBank   = K('1.1.2')
-  const pendYMH         = K('1.1.8')
+  const pendYMH         = K('1.1.11')
   const tambahSukarela  = K('2.1.9')
   const tambahKhusus    = K('2.1.10')
   const tambahBerjangka = K('2.1.11')
@@ -303,7 +303,7 @@ export function ArusKasPage() {
   const pengeluaranSP   = K('1.1.4')
   const utangUsaha      = K('2.1.1')
   const pembayaranSHU   = K('3.1.5')
-  const biayaDimuka     = K('1.1.9')
+  const biayaDimuka     = K('1.1.10')
   const setorBank       = K('1.1.2')
   const ambilSukarela   = K('2.1.9')
   const ambilKhusus     = K('2.1.10')
@@ -363,16 +363,16 @@ export function ArusKasPage() {
         {/* ── OPERASI ── */}
         <LapHeader label="ARUS KAS DARI AKTIVITAS OPERASI" />
         <LapHeader label="Penerimaan Kas" />
-        <LapRow label="4.1.1 — Pendapatan Jasa Bunga"          value={penJasaBunga}    indent={1} />
+        <LapRow label="4.1.1 — Pendapatan Jasa Pinjaman"        value={penJasaBunga}    indent={1} />
         <LapRow label="4.1.2 — Pendapatan Administrasi"         value={penAdm}          indent={1} />
         <LapRow label="4.1.3 — Pendapatan Denda"                value={penDenda}        indent={1} />
-        <LapRow label="4.1.4 — Penjualan Toko"                  value={penToko}         indent={1} />
-        <LapRow label="4.1.5 — Pendapatan Konsinyasi"           value={penKons}         indent={1} />
+        <LapRow label="4.1.4 — Pendapatan Sewa"                  value={penToko}         indent={1} />
+        <LapRow label="4.1.5 — Penjualan Toko"                  value={penKons}         indent={1} />
         <LapRow label="1.1.4 — Piutang Simpan Pinjam"           value={piutangSP}       indent={1} />
         <LapRow label="1.1.6 — Piutang Toko"                    value={piutangToko}     indent={1} />
-        <LapRow label="1.1.5 — Piutang Jasa Lain"               value={piutangJasa}     indent={1} />
+        <LapRow label="1.1.5 — Piutang Jasa Pinjaman"            value={piutangJasa}     indent={1} />
         <LapRow label="1.1.2 — Penarikan dari Bank"             value={penarikanBank}   indent={1} />
-        <LapRow label="1.1.8 — Pendapatan YMH Diterima"         value={pendYMH}         indent={1} />
+        <LapRow label="1.1.11 — Pendapatan diterima dimuka"      value={pendYMH}         indent={1} />
         <LapRow label="2.1.9 — Penambahan Simpanan Sukarela"    value={tambahSukarela}  indent={1} />
         <LapRow label="2.1.10 — Penambahan Simpanan Khusus"     value={tambahKhusus}    indent={1} />
         <LapRow label="2.1.11 — Penambahan Simpanan Berjangka"  value={tambahBerjangka} indent={1} />
@@ -386,7 +386,7 @@ export function ArusKasPage() {
         <LapRow label="1.1.4 — Piutang Simpan Pinjam"             value={pengeluaranSP}   indent={1} />
         <LapRow label="2.1.1 — Utang Usaha"                       value={utangUsaha}      indent={1} />
         <LapRow label="3.1.5 — Pembayaran Dana-Dana SHU"          value={pembayaranSHU}   indent={1} />
-        <LapRow label="1.1.9 — Biaya Dibayar Dimuka"              value={biayaDimuka}     indent={1} />
+        <LapRow label="1.1.10 — Biaya dibayar dimuka"              value={biayaDimuka}     indent={1} />
         <LapRow label="1.1.2 — Penyetoran ke Bank"                value={setorBank}       indent={1} />
         <LapRow label="2.1.9 — Pengambilan Simpanan Sukarela"     value={ambilSukarela}   indent={1} />
         <LapRow label="2.1.10 — Pengambilan Simpanan Khusus"      value={ambilKhusus}     indent={1} />
