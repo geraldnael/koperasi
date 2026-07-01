@@ -271,7 +271,9 @@ export function EkuitasPage() {
 // ─────────────────────────────────────────────────────────────────────────
 export function ArusKasPage() {
   const { saldoAwal, jurnal, identitas, customCOA } = useAppStore()
-  const saldos = useMemo(() => computeSaldos(saldoAwal, jurnal, customCOA), [saldoAwal, jurnal, customCOA])
+  // Arus Kas hanya mencatat MUTASI JURNAL periode berjalan — saldo awal tidak ikut
+  // (saldo awal hanya relevan di Posisi Keuangan / Neraca)
+  const saldos = useMemo(() => computeSaldos({}, jurnal, customCOA), [jurnal, customCOA])
   const K  = (k: string) => saldos[k]   ?? 0
   const SA = (k: string) => saldoAwal[k] ?? 0
 
@@ -406,7 +408,7 @@ export function ArusKasPage() {
 
         <LapHeader label="Pengeluaran Kas" />
         <LapRow label="1.2.3 — Simpanan di Koperasi Sekunder"         value={simpKopSekOut}   indent={1} />
-        <LapRow label="1.2.4 — Investasi Jangka Panjang"              value={investasiJPOut}  indent={1} />
+        <LapRow label="1.2.4 — SKPB di PKPRI"                          value={investasiJPOut}  indent={1} />
         <LapRow label="1.2.5 — Pembelian Properti Investasi"          value={beliPropInv}     indent={1} />
         <LapRow label="1.2.6–1.2.9 — Pembelian Aset Tetap"           value={beliAsetTetap}   indent={1} />
         <LapRow label="Jumlah Pengeluaran Investasi" value={totalInvestasiOut} variant="subtotal" />
