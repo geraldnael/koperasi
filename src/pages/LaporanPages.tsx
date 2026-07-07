@@ -336,9 +336,9 @@ export function ArusKasPage() {
   const hibah            = K('3.1.3')
   const totalPendanaanIn = tambahPokok + tambahWajib + pinjamanBank + penyertaan + hibah
 
-  const kembaliPokok     = Math.max(0, SA('3.1.1') - K('3.1.1'))
-  const kembaliWajib     = Math.max(0, SA('3.1.2') - K('3.1.2'))
-  const bayarPinjBank    = Math.max(0, SA('2.2.1') - K('2.2.1'))
+  const kembaliPokok     = K('3.1.1')
+  const kembaliWajib     = K('3.1.2')
+  const bayarPinjBank    = K('2.2.1')
   const totalPendanaanOut= kembaliPokok + kembaliWajib + bayarPinjBank
   const netPendanaan     = totalPendanaanIn - totalPendanaanOut
 

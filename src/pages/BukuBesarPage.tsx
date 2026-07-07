@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { BookOpen } from 'lucide-react'
-import { COA } from '../utils/coa'
+import { COA, mergeCustomCOA } from '../utils/coa'
 import { getBukuBesar, fmt } from '../utils/accounting'
 import { useAppStore } from '../store/useAppStore'
 import { PageHeader, EmptyState } from '../components/ui'
@@ -8,14 +8,15 @@ import { printElement } from '../utils/printHelper'
 import { exportBukuBesar } from '../utils/exportExcel'
 
 export default function BukuBesarPage() {
-  const { saldoAwal, jurnal, identitas } = useAppStore()
+  const { saldoAwal, jurnal, identitas, customCOA } = useAppStore()
+  const allCOA = mergeCustomCOA(customCOA)
   const [kode, setKode]     = useState('')
   const [dari, setDari]     = useState(identitas.awal || '')
   const [sampai, setSampai] = useState(identitas.akhir || '')
 
   const akuns = kode
-    ? COA.filter(a => a.kode === kode)
-    : COA.filter(a => {
+    ? allCOA.filter(a => a.kode === kode)
+    : allCOA.filter(a => {
         const sa = saldoAwal[a.kode] ?? 0
         const hasJurnal = jurnal.some(j => j.rows.some(r => r.kode_d === a.kode || r.kode_k === a.kode))
         return sa !== 0 || hasJurnal
@@ -23,7 +24,7 @@ export default function BukuBesarPage() {
 
   const handleExcel = () => {
     if (!kode) { alert('Pilih akun terlebih dahulu untuk export Excel'); return }
-    const akun = COA.find(a => a.kode === kode)
+    const akun = allCOA.find(a => a.kode === kode)
     if (!akun) return
     const rows = getBukuBesar(kode, saldoAwal, jurnal, dari || undefined, sampai || undefined)
     const sa = saldoAwal[kode] ?? 0
@@ -61,7 +62,7 @@ export default function BukuBesarPage() {
           <label className="label">Pilih Akun</label>
           <select className="input" value={kode} onChange={e => setKode(e.target.value)}>
             <option value="">— Semua Akun Aktif —</option>
-            {COA.map(a => <option key={a.kode} value={a.kode}>{a.kode} — {a.nama}</option>)}
+            {allCOA.map(a => <option key={a.kode} value={a.kode}>{a.kode} — {a.nama}</option>)}
           </select>
         </div>
         <div>

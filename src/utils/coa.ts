@@ -114,7 +114,8 @@ export function mergeCustomCOA(customCOA: Akun[]): Akun[] {
     .sort((a, b) => a.kode.localeCompare(b.kode, undefined, { numeric: true }))
 }
 
-export function getAkunNama(kode: string): string {
-  const akun = COA.find(a => a.kode === kode)
+export function getAkunNama(kode: string, coaList?: Akun[]): string {
+  const list = coaList ?? COA
+  const akun = list.find(a => a.kode === kode)
   return akun ? akun.nama : kode
 }

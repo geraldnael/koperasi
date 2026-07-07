@@ -1,7 +1,7 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import { Plus, Trash2, Save, RotateCcw, PenLine, Pencil, X } from 'lucide-react'
 import { useAppStore } from '../store/useAppStore'
-import { COA, getAkunNama } from '../utils/coa'
+import { COA, getAkunNama, mergeCustomCOA } from '../utils/coa'
 import { fmt } from '../utils/accounting'
 import { PageHeader, BalanceAlert, EmptyState } from '../components/ui'
 import { printElement } from '../utils/printHelper'
@@ -221,7 +221,8 @@ function JurnalRow({
 // Main JurnalPage
 // ═══════════════════════════════════════════════════════════════════════
 export default function JurnalPage() {
-  const { jurnal, addJurnal, updateJurnal, deleteJurnal, anggota, identitas } = useAppStore()
+  const { jurnal, addJurnal, updateJurnal, deleteJurnal, anggota, identitas, customCOA } = useAppStore()
+  const allCOA = useMemo(() => mergeCustomCOA(customCOA), [customCOA])
 
   const anggotaNama = useMemo(() => anggota.map(a => a.nama), [anggota])
 
@@ -264,9 +265,9 @@ export default function JurnalPage() {
 
   const autoNoBukti = `JU-${String(jurnal.length + 1).padStart(3, '0')}`
 
-  const coaOpts = useMemo(() => COA.map(a => (
+  const coaOpts = useMemo(() => allCOA.map(a => (
     <option key={a.kode} value={a.kode}>{a.kode} — {a.nama}</option>
-  )), [])
+  )), [allCOA])
 
   return (
     <div className="p-6" id="print-jurnal">
@@ -437,12 +438,12 @@ export default function JurnalPage() {
                               )}
                               {r.kode_d && (
                                 <span className="text-blue-600 mr-1">
-                                  Dr {r.kode_d} {getAkunNama(r.kode_d)}
+                                  Dr {r.kode_d} {getAkunNama(r.kode_d, allCOA)}
                                 </span>
                               )}
                               {r.kode_k && (
                                 <span className="text-emerald-600 ml-2">
-                                  Cr {r.kode_k} {getAkunNama(r.kode_k)}
+                                  Cr {r.kode_k} {getAkunNama(r.kode_k, allCOA)}
                                 </span>
                               )}
                               {tag && (
