@@ -52,14 +52,28 @@ export function computeSaldos(
     j.rows.forEach(r => {
       // Handle both positive and negative values
       if (r.kode_d && r.debet !== 0 && r.debet !== undefined) {
-        saldo[r.kode_d] = (saldo[r.kode_d] ?? 0) + (r.debet || 0)
+        const akunD = allCOA.find(a => a.kode === r.kode_d)
+        if (akunD) {
+          if (akunD.tipe === 'D') {
+            // Akun normal Debet (Aset/Beban) di-debet → saldo bertambah
+            saldo[r.kode_d] = (saldo[r.kode_d] ?? 0) + (r.debet || 0)
+          } else {
+            // Akun normal Kredit (Kewajiban/Ekuitas/Pendapatan) di-debet → saldo berkurang
+            saldo[r.kode_d] = (saldo[r.kode_d] ?? 0) - (r.debet || 0)
+          }
+        } else {
+          // Unknown akun (custom) - just add
+          saldo[r.kode_d] = (saldo[r.kode_d] ?? 0) + (r.debet || 0)
+        }
       }
       if (r.kode_k && r.kredit !== 0 && r.kredit !== undefined) {
         const akun = allCOA.find(a => a.kode === r.kode_k)
         if (akun) {
           if (akun.tipe === 'D') {
+            // Akun normal Debet di-kredit → saldo berkurang
             saldo[r.kode_k] = (saldo[r.kode_k] ?? 0) - (r.kredit || 0)
           } else {
+            // Akun normal Kredit di-kredit → saldo bertambah
             saldo[r.kode_k] = (saldo[r.kode_k] ?? 0) + (r.kredit || 0)
           }
         } else {
@@ -126,7 +140,8 @@ export function getBukuBesar(
   filtered.forEach(j => {
     j.rows.forEach(r => {
       if (r.kode_d === kode && r.debet) {
-        saldo += r.debet
+        if (akun.tipe === 'D') saldo += r.debet
+        else saldo -= r.debet
         rows.push({ tanggal: j.tanggal, referensi: j.nobukti, keterangan: j.keterangan, debet: r.debet, kredit: null, saldo, tipe: 'mutasi' })
       }
       if (r.kode_k === kode && r.kredit) {
