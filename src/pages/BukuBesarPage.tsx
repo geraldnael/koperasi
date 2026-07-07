@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { BookOpen } from 'lucide-react'
-import { COA, mergeCustomCOA } from '../utils/coa'
+import { mergeCustomCOA } from '../utils/coa'
 import { getBukuBesar, fmt } from '../utils/accounting'
 import { useAppStore } from '../store/useAppStore'
 import { PageHeader, EmptyState } from '../components/ui'

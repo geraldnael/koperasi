@@ -1,7 +1,7 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import { Plus, Trash2, Save, RotateCcw, PenLine, Pencil, X } from 'lucide-react'
 import { useAppStore } from '../store/useAppStore'
-import { COA, getAkunNama, mergeCustomCOA } from '../utils/coa'
+import { getAkunNama, mergeCustomCOA } from '../utils/coa'
 import { fmt } from '../utils/accounting'
 import { PageHeader, BalanceAlert, EmptyState } from '../components/ui'
 import { printElement } from '../utils/printHelper'
