@@ -275,6 +275,8 @@ export function ArusKasPage() {
   const saldos = useMemo(() => computeSaldos(saldoAwal, jurnal, customCOA), [saldoAwal, jurnal, customCOA])
   // Arus kas per akun lawan — diturunkan langsung dari baris jurnal yang menyentuh Kas (1.1.1) / Bank (1.1.2)
   const { masuk, keluar } = useMemo(() => getKasBankMutasi(jurnal), [jurnal])
+  const allCOA = useMemo(() => mergeCustomCOA(customCOA), [customCOA])
+  const namaAkun = (kode: string) => allCOA.find(a => a.kode === kode)?.nama ?? kode
   const M  = (k: string) => masuk[k]  ?? 0
   const Kl = (k: string) => keluar[k] ?? 0
   const sumK = (ks: string[]) => ks.reduce((a, k) => a + Kl(k), 0)
@@ -294,9 +296,6 @@ export function ArusKasPage() {
   const tambahSukarela  = M('2.1.9')
   const tambahKhusus    = M('2.1.10')
   const tambahBerjangka = M('2.1.11')
-  const totalPenerimaanOp = penJasaBunga + penAdm + penDenda + penToko + penKons
-    + piutangSP + piutangToko + piutangJasa
-    + pendYMH + tambahSukarela + tambahKhusus + tambahBerjangka
 
   // ── AKTIVITAS OPERASI — PENGELUARAN (Kas/Bank dikredit, akun lawan didebet) ──
   const pembelian       = Kl('5.1.1')
@@ -311,24 +310,17 @@ export function ArusKasPage() {
   const ambilKhusus     = Kl('2.1.10')
   const ambilBerjangka  = Kl('2.1.11')
   const bebanPajak      = Kl('5.2.4')
-  const totalPengeluaranOp = pembelian + bebanUsahaSum + bebanAdmSum + bebanKopSum
-    + pengeluaranSP + utangUsaha + pembayaranSHU + biayaDimuka
-    + ambilSukarela + ambilKhusus + ambilBerjangka + bebanPajak
-  const netOperasi = totalPenerimaanOp - totalPengeluaranOp
 
   // ── AKTIVITAS INVESTASI ────────────────────────────────────────────────
   const investasiJPIn    = M('1.2.1')
   const simpKopSekIn     = M('1.2.2')
   const keuntAsetTetap   = M('4.2.2')
   const suratBerhargaIn  = M('1.1.7')
-  const totalInvestasiIn = investasiJPIn + simpKopSekIn + keuntAsetTetap + suratBerhargaIn
 
   const simpKopSekOut    = Kl('1.2.3')
   const investasiJPOut   = Kl('1.2.4')
   const beliPropInv      = Kl('1.2.5')
   const beliAsetTetap    = sumK(['1.2.6','1.2.7','1.2.8','1.2.9'])
-  const totalInvestasiOut= simpKopSekOut + investasiJPOut + beliPropInv + beliAsetTetap
-  const netInvestasi     = totalInvestasiIn - totalInvestasiOut
 
   // ── AKTIVITAS PENDANAAN ────────────────────────────────────────────────
   const tambahPokok      = M('3.1.1')
@@ -336,13 +328,44 @@ export function ArusKasPage() {
   const pinjamanBank     = M('2.2.1')
   const penyertaan       = M('3.1.4')
   const hibah            = M('3.1.3')
-  const totalPendanaanIn = tambahPokok + tambahWajib + pinjamanBank + penyertaan + hibah
 
   const kembaliPokok     = Kl('3.1.1')
   const kembaliWajib     = Kl('3.1.2')
   const bayarPinjBank    = Kl('2.2.1')
-  const totalPendanaanOut= kembaliPokok + kembaliWajib + bayarPinjBank
-  const netPendanaan     = totalPendanaanIn - totalPendanaanOut
+
+  // ── LAIN-LAIN — tangkap semua akun lawan yang BELUM masuk daftar kategori
+  //    di atas, supaya laporan selalu balance ke Saldo Kas Akhir (selisih = 0) ──
+  const KODE_MASUK_DIKENAL = [
+    '4.1.1','4.1.2','4.1.3','4.1.4','4.1.5','1.1.4','1.1.6','1.1.5','1.1.11',
+    '2.1.9','2.1.10','2.1.11','1.2.1','1.2.2','4.2.2','1.1.7',
+    '3.1.1','3.1.2','2.2.1','3.1.4','3.1.3',
+  ]
+  const KODE_KELUAR_DIKENAL = [
+    '5.1.1','5.1.2','5.1.3','5.1.4','5.1.5','5.1.6','5.1.7','5.1.8','5.1.9','5.1.10',
+    '5.1.11','5.1.12','5.1.13','5.1.14','5.1.15','5.1.16','5.1.17','5.1.18','5.1.19','5.1.20',
+    '1.1.4','2.1.1','3.1.5','1.1.10','2.1.9','2.1.10','2.1.11','5.2.4',
+    '1.2.3','1.2.4','1.2.5','1.2.6','1.2.7','1.2.8','1.2.9','3.1.1','3.1.2','2.2.1',
+  ]
+  const lainMasukItems  = Object.entries(masuk).filter(([k, v]) => v && !KODE_MASUK_DIKENAL.includes(k))
+  const lainKeluarItems = Object.entries(keluar).filter(([k, v]) => v && !KODE_KELUAR_DIKENAL.includes(k))
+  const lainMasuk  = lainMasukItems.reduce((a, [, v]) => a + v, 0)
+  const lainKeluar = lainKeluarItems.reduce((a, [, v]) => a + v, 0)
+
+  const totalPenerimaanOp = penJasaBunga + penAdm + penDenda + penToko + penKons
+    + piutangSP + piutangToko + piutangJasa
+    + pendYMH + tambahSukarela + tambahKhusus + tambahBerjangka + lainMasuk
+  const totalPengeluaranOp = pembelian + bebanUsahaSum + bebanAdmSum + bebanKopSum
+    + pengeluaranSP + utangUsaha + pembayaranSHU + biayaDimuka
+    + ambilSukarela + ambilKhusus + ambilBerjangka + bebanPajak + lainKeluar
+  const netOperasi = totalPenerimaanOp - totalPengeluaranOp
+
+  const totalInvestasiIn  = investasiJPIn + simpKopSekIn + keuntAsetTetap + suratBerhargaIn
+  const totalInvestasiOut = simpKopSekOut + investasiJPOut + beliPropInv + beliAsetTetap
+  const netInvestasi      = totalInvestasiIn - totalInvestasiOut
+
+  const totalPendanaanIn  = tambahPokok + tambahWajib + pinjamanBank + penyertaan + hibah
+  const totalPendanaanOut = kembaliPokok + kembaliWajib + bayarPinjBank
+  const netPendanaan      = totalPendanaanIn - totalPendanaanOut
 
   // ── SALDO KAS ─────────────────────────────────────────────────────────
   const kasAwal      = SA('1.1.1') + SA('1.1.2')
@@ -377,6 +400,16 @@ export function ArusKasPage() {
         <LapRow label="2.1.9 — Penambahan Simpanan Sukarela"    value={tambahSukarela}  indent={1} />
         <LapRow label="2.1.10 — Penambahan Simpanan Khusus"     value={tambahKhusus}    indent={1} />
         <LapRow label="2.1.11 — Penambahan Simpanan Berjangka"  value={tambahBerjangka} indent={1} />
+        {lainMasukItems.length > 0 && (
+          <>
+            <LapRow label="Lain-lain (akun belum dikategorikan)" value={lainMasuk} indent={1} />
+            {lainMasukItems.map(([kode, v]) => (
+              <div key={kode} className="text-[11px] text-slate-400 pl-8 -mt-1 mb-1">
+                {kode} — {namaAkun(kode)}: Rp {fmt(v)}
+              </div>
+            ))}
+          </>
+        )}
         <LapRow label="Jumlah Penerimaan Kas" value={totalPenerimaanOp} variant="subtotal" />
 
         <LapHeader label="Pengeluaran Kas" />
@@ -392,6 +425,16 @@ export function ArusKasPage() {
         <LapRow label="2.1.10 — Pengambilan Simpanan Khusus"      value={ambilKhusus}     indent={1} />
         <LapRow label="2.1.11 — Pengambilan Simpanan Berjangka"   value={ambilBerjangka}  indent={1} />
         <LapRow label="5.2.4 — Beban Pajak Badan"                 value={bebanPajak}      indent={1} />
+        {lainKeluarItems.length > 0 && (
+          <>
+            <LapRow label="Lain-lain (akun belum dikategorikan)" value={lainKeluar} indent={1} />
+            {lainKeluarItems.map(([kode, v]) => (
+              <div key={kode} className="text-[11px] text-slate-400 pl-8 -mt-1 mb-1">
+                {kode} — {namaAkun(kode)}: Rp {fmt(v)}
+              </div>
+            ))}
+          </>
+        )}
         <LapRow label="Jumlah Pengeluaran Kas" value={totalPengeluaranOp} variant="subtotal" />
         <LapRow label="KENAIKAN (PENURUNAN) KAS DARI AKTIVITAS OPERASI" value={netOperasi} variant="total" />
 
