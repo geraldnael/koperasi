@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { useAppStore } from '../store/useAppStore'
-import { computeSaldos, calcNeraca, calcSHU, fmt } from '../utils/accounting'
+import { computeSaldos, calcNeraca, calcSHU, fmt, getKasBankMutasi } from '../utils/accounting'
 import { mergeCustomCOA,} from '../utils/coa'
 import type { Akun } from '../types'
 import { PageHeader, PrintButton, DownloadButton, LapRow, LapHeader } from '../components/ui'
@@ -271,74 +271,76 @@ export function EkuitasPage() {
 // ─────────────────────────────────────────────────────────────────────────
 export function ArusKasPage() {
   const { saldoAwal, jurnal, identitas, customCOA } = useAppStore()
-  // Arus Kas hanya mencatat MUTASI JURNAL periode berjalan — saldo awal tidak ikut
-  // (saldo awal hanya relevan di Posisi Keuangan / Neraca)
-  const saldos = useMemo(() => computeSaldos({}, jurnal, customCOA), [jurnal, customCOA])
+  // Saldo akhir kas/bank tetap dari saldo (untuk baris "Saldo Kas Akhir")
+  const saldos = useMemo(() => computeSaldos(saldoAwal, jurnal, customCOA), [saldoAwal, jurnal, customCOA])
+  // Arus kas per akun lawan — diturunkan langsung dari baris jurnal yang menyentuh Kas (1.1.1) / Bank (1.1.2)
+  const { masuk, keluar } = useMemo(() => getKasBankMutasi(jurnal), [jurnal])
+  const M  = (k: string) => masuk[k]  ?? 0
+  const Kl = (k: string) => keluar[k] ?? 0
+  const sumK = (ks: string[]) => ks.reduce((a, k) => a + Kl(k), 0)
   const K  = (k: string) => saldos[k]   ?? 0
   const SA = (k: string) => saldoAwal[k] ?? 0
 
-  // ── AKTIVITAS OPERASI — PENERIMAAN ────────────────────────────────────
-  const penJasaBunga    = K('4.1.1')
-  const penAdm          = K('4.1.2')
-  const penDenda        = K('4.1.3')
-  const penToko         = K('4.1.4')
-  const penKons         = K('4.1.5')
-  const piutangSP       = K('1.1.4')
-  const piutangToko     = K('1.1.6')
-  const piutangJasa     = K('1.1.5')
-  const penarikanBank   = K('1.1.2')
-  const pendYMH         = K('1.1.11')
-  const tambahSukarela  = K('2.1.9')
-  const tambahKhusus    = K('2.1.10')
-  const tambahBerjangka = K('2.1.11')
+  // ── AKTIVITAS OPERASI — PENERIMAAN (Kas/Bank didebet, akun lawan dikredit) ──
+  const penJasaBunga    = M('4.1.1')
+  const penAdm          = M('4.1.2')
+  const penDenda        = M('4.1.3')
+  const penToko         = M('4.1.4')
+  const penKons         = M('4.1.5')
+  const piutangSP       = M('1.1.4')
+  const piutangToko     = M('1.1.6')
+  const piutangJasa     = M('1.1.5')
+  const pendYMH         = M('1.1.11')
+  const tambahSukarela  = M('2.1.9')
+  const tambahKhusus    = M('2.1.10')
+  const tambahBerjangka = M('2.1.11')
   const totalPenerimaanOp = penJasaBunga + penAdm + penDenda + penToko + penKons
-    + piutangSP + piutangToko + piutangJasa + penarikanBank
+    + piutangSP + piutangToko + piutangJasa
     + pendYMH + tambahSukarela + tambahKhusus + tambahBerjangka
 
-  // ── AKTIVITAS OPERASI — PENGELUARAN ───────────────────────────────────
-  const pembelian       = K('5.1.1')
-  const bebanUsahaSum   = ['5.1.2','5.1.3','5.1.4','5.1.5','5.1.6'].reduce((s,k)=>s+K(k),0)
-  const bebanAdmSum     = ['5.1.7','5.1.8','5.1.9','5.1.10','5.1.11','5.1.12','5.1.13','5.1.14','5.1.15'].reduce((s,k)=>s+K(k),0)
-  const bebanKopSum     = ['5.1.16','5.1.17','5.1.18','5.1.19','5.1.20'].reduce((s,k)=>s+K(k),0)
-  const pengeluaranSP   = K('1.1.4')
-  const utangUsaha      = K('2.1.1')
-  const pembayaranSHU   = K('3.1.5')
-  const biayaDimuka     = K('1.1.10')
-  const setorBank       = K('1.1.2')
-  const ambilSukarela   = K('2.1.9')
-  const ambilKhusus     = K('2.1.10')
-  const ambilBerjangka  = K('2.1.11')
-  const bebanPajak      = K('5.2.4')
+  // ── AKTIVITAS OPERASI — PENGELUARAN (Kas/Bank dikredit, akun lawan didebet) ──
+  const pembelian       = Kl('5.1.1')
+  const bebanUsahaSum   = sumK(['5.1.2','5.1.3','5.1.4','5.1.5','5.1.6'])
+  const bebanAdmSum     = sumK(['5.1.7','5.1.8','5.1.9','5.1.10','5.1.11','5.1.12','5.1.13','5.1.14','5.1.15'])
+  const bebanKopSum     = sumK(['5.1.16','5.1.17','5.1.18','5.1.19','5.1.20'])
+  const pengeluaranSP   = Kl('1.1.4')
+  const utangUsaha      = Kl('2.1.1')
+  const pembayaranSHU   = Kl('3.1.5')
+  const biayaDimuka     = Kl('1.1.10')
+  const ambilSukarela   = Kl('2.1.9')
+  const ambilKhusus     = Kl('2.1.10')
+  const ambilBerjangka  = Kl('2.1.11')
+  const bebanPajak      = Kl('5.2.4')
   const totalPengeluaranOp = pembelian + bebanUsahaSum + bebanAdmSum + bebanKopSum
     + pengeluaranSP + utangUsaha + pembayaranSHU + biayaDimuka
-    + setorBank + ambilSukarela + ambilKhusus + ambilBerjangka + bebanPajak
+    + ambilSukarela + ambilKhusus + ambilBerjangka + bebanPajak
   const netOperasi = totalPenerimaanOp - totalPengeluaranOp
 
   // ── AKTIVITAS INVESTASI ────────────────────────────────────────────────
-  const investasiJPIn    = K('1.2.1')
-  const simpKopSekIn     = K('1.2.2')
-  const keuntAsetTetap   = K('4.2.2')
-  const suratBerhargaIn  = K('1.1.7')
+  const investasiJPIn    = M('1.2.1')
+  const simpKopSekIn     = M('1.2.2')
+  const keuntAsetTetap   = M('4.2.2')
+  const suratBerhargaIn  = M('1.1.7')
   const totalInvestasiIn = investasiJPIn + simpKopSekIn + keuntAsetTetap + suratBerhargaIn
 
-  const simpKopSekOut    = K('1.2.3')
-  const investasiJPOut   = K('1.2.4')
-  const beliPropInv      = K('1.2.5')
-  const beliAsetTetap    = ['1.2.6','1.2.7','1.2.8','1.2.9'].reduce((s,k)=>s+K(k),0)
+  const simpKopSekOut    = Kl('1.2.3')
+  const investasiJPOut   = Kl('1.2.4')
+  const beliPropInv      = Kl('1.2.5')
+  const beliAsetTetap    = sumK(['1.2.6','1.2.7','1.2.8','1.2.9'])
   const totalInvestasiOut= simpKopSekOut + investasiJPOut + beliPropInv + beliAsetTetap
   const netInvestasi     = totalInvestasiIn - totalInvestasiOut
 
   // ── AKTIVITAS PENDANAAN ────────────────────────────────────────────────
-  const tambahPokok      = K('3.1.1')
-  const tambahWajib      = K('3.1.2')
-  const pinjamanBank     = K('2.2.1')
-  const penyertaan       = K('3.1.4')
-  const hibah            = K('3.1.3')
+  const tambahPokok      = M('3.1.1')
+  const tambahWajib      = M('3.1.2')
+  const pinjamanBank     = M('2.2.1')
+  const penyertaan       = M('3.1.4')
+  const hibah            = M('3.1.3')
   const totalPendanaanIn = tambahPokok + tambahWajib + pinjamanBank + penyertaan + hibah
 
-  const kembaliPokok     = K('3.1.1')
-  const kembaliWajib     = K('3.1.2')
-  const bayarPinjBank    = K('2.2.1')
+  const kembaliPokok     = Kl('3.1.1')
+  const kembaliWajib     = Kl('3.1.2')
+  const bayarPinjBank    = Kl('2.2.1')
   const totalPendanaanOut= kembaliPokok + kembaliWajib + bayarPinjBank
   const netPendanaan     = totalPendanaanIn - totalPendanaanOut
 
@@ -371,7 +373,6 @@ export function ArusKasPage() {
         <LapRow label="1.1.4 — Piutang Simpan Pinjam"           value={piutangSP}       indent={1} />
         <LapRow label="1.1.6 — Piutang Toko"                    value={piutangToko}     indent={1} />
         <LapRow label="1.1.5 — Piutang Jasa Pinjaman"            value={piutangJasa}     indent={1} />
-        <LapRow label="1.1.2 — Penarikan dari Bank"             value={penarikanBank}   indent={1} />
         <LapRow label="1.1.11 — Pendapatan diterima dimuka"      value={pendYMH}         indent={1} />
         <LapRow label="2.1.9 — Penambahan Simpanan Sukarela"    value={tambahSukarela}  indent={1} />
         <LapRow label="2.1.10 — Penambahan Simpanan Khusus"     value={tambahKhusus}    indent={1} />
@@ -387,7 +388,6 @@ export function ArusKasPage() {
         <LapRow label="2.1.1 — Utang Usaha"                       value={utangUsaha}      indent={1} />
         <LapRow label="3.1.5 — Pembayaran Dana-Dana SHU"          value={pembayaranSHU}   indent={1} />
         <LapRow label="1.1.10 — Biaya dibayar dimuka"              value={biayaDimuka}     indent={1} />
-        <LapRow label="1.1.2 — Penyetoran ke Bank"                value={setorBank}       indent={1} />
         <LapRow label="2.1.9 — Pengambilan Simpanan Sukarela"     value={ambilSukarela}   indent={1} />
         <LapRow label="2.1.10 — Pengambilan Simpanan Khusus"      value={ambilKhusus}     indent={1} />
         <LapRow label="2.1.11 — Pengambilan Simpanan Berjangka"   value={ambilBerjangka}  indent={1} />

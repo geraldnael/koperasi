@@ -262,6 +262,51 @@ export function calcArusKas(saldos: Record<string, number>, saldoAwal: Record<st
   }
 }
 
+/**
+ * Mutasi Kas/Bank per akun lawan — dasar Laporan Arus Kas (Direct Method).
+ *
+ * Aturan:
+ *  - Kalau di baris jurnal, Akun 1.1.1 (Kas) atau 1.1.2 (Bank) ada di sisi DEBET
+ *    → kas/bank BERTAMBAH → akun lawannya (kode_k) dicatat sebagai PENERIMAAN (masuk)
+ *  - Kalau Akun 1.1.1/1.1.2 ada di sisi KREDIT
+ *    → kas/bank BERKURANG → akun lawannya (kode_d) dicatat sebagai PENGELUARAN (keluar)
+ *  - Kalau kedua sisi baris sama-sama Kas/Bank (setor tunai ke bank / tarik tunai dari bank)
+ *    → hanya perpindahan internal antar kas & bank, tidak mempengaruhi total Kas+Bank,
+ *      jadi TIDAK dihitung sebagai arus kas.
+ */
+export interface KasBankMutasi {
+  masuk: Record<string, number>   // per kode akun lawan → total penerimaan kas
+  keluar: Record<string, number>  // per kode akun lawan → total pengeluaran kas
+}
+
+export function getKasBankMutasi(jurnal: JurnalEntry[]): KasBankMutasi {
+  const masuk: Record<string, number> = {}
+  const keluar: Record<string, number> = {}
+  const isKasBank = (kode: string) => kode === '1.1.1' || kode === '1.1.2'
+
+  jurnal.forEach(j => {
+    j.rows.forEach(r => {
+      const dKasBank = isKasBank(r.kode_d)
+      const kKasBank = isKasBank(r.kode_k)
+
+      // Transfer internal Kas <-> Bank: tidak mempengaruhi total gabungan, skip
+      if (dKasBank && kKasBank) return
+
+      // Kas/Bank di DEBET → bertambah → akun lawan (kredit) = penerimaan
+      if (dKasBank && r.kode_k && r.debet) {
+        masuk[r.kode_k] = (masuk[r.kode_k] ?? 0) + r.debet
+      }
+      // Kas/Bank di KREDIT → berkurang → akun lawan (debet) = pengeluaran
+      if (kKasBank && r.kode_d && r.kredit) {
+        keluar[r.kode_d] = (keluar[r.kode_d] ?? 0) + r.kredit
+      }
+    })
+  })
+
+  return { masuk, keluar }
+}
+
+
 // ─── Akun simpanan yang relevan ───────────────────────────────────────────
 export const AKUN_KAS_BANK = ['1.1.1', '1.1.2']
 export const AKUN_SIMPANAN_MAP: Record<string, 'wajib' | 'wajib_khs' | 'sukarela' | 'jasa_suk' | 'tht' | 'jasa_tht'> = {
