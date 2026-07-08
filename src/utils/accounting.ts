@@ -315,21 +315,19 @@ export function calcSimpananBulanan(jurnal: JurnalEntry[]): MutasiSimpananAnggot
 
       const mut = result[key][bulan]
 
-      // Tentukan jenis simpanan dari akun yang terlibat
-      // Cek akun kredit dulu (simpanan biasanya di sisi kredit)
       const jenisDariKredit = AKUN_SIMPANAN_MAP[r.kode_k]
       const jenisDariDebet  = AKUN_SIMPANAN_MAP[r.kode_d]
-      // Fallback: jika akun tidak dikenali, masukkan ke 'wajib'
-      const jenis: keyof MutasiSimpananBulan = jenisDariKredit || jenisDariDebet || 'wajib'
 
-      if (kredit > 0) {
-        // Kredit → simpanan anggota BERTAMBAH (setoran)
-        mut[jenis] += kredit
+      // Proses sisi kredit dan debet SECARA TERPISAH berdasarkan akun yang cocok
+      // Kredit ke akun simpanan → setoran (simpanan BERTAMBAH)
+      if (jenisDariKredit && kredit > 0) {
+        mut[jenisDariKredit] += kredit
       }
-      if (debet > 0) {
-        // Debet → simpanan anggota BERKURANG (penarikan)
-        mut[jenis] -= debet
+      // Debet dari akun simpanan → penarikan (simpanan BERKURANG)
+      if (jenisDariDebet && debet > 0) {
+        mut[jenisDariDebet] -= debet
       }
+      // Jika tidak ada sisi yang cocok dengan AKUN_SIMPANAN_MAP, skip baris ini
     })
   })
 

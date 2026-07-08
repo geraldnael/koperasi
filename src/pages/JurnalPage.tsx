@@ -9,13 +9,11 @@ import { exportJurnal } from '../utils/exportExcel'
 import type { JurnalBaris, JurnalEntry } from '../types'
 
 // ── Akun yang mempengaruhi buku pembantu ─────────────────────────────────
-const AKUN_SIMPANAN   = new Set(['3.1.2','2.1.8','2.1.9','2.1.10'])
-const AKUN_KAS_BANK   = new Set(['1.1.1','1.1.2'])
+const AKUN_SIMPANAN = new Set(['3.1.1','3.1.2','2.1.8','2.1.9','2.1.10','2.1.14','5.1.2','4.2.3'])
 
 function rowTag(r: JurnalBaris): 'simpanan' | 'piutang' | null {
-  // Baris simpanan: akun menyentuh akun simpanan + kas/bank
-  if ((AKUN_KAS_BANK.has(r.kode_d) && AKUN_SIMPANAN.has(r.kode_k)) ||
-      (AKUN_SIMPANAN.has(r.kode_d) && AKUN_KAS_BANK.has(r.kode_k))) return 'simpanan'
+  // Baris simpanan: salah satu sisi menyentuh akun simpanan
+  if (AKUN_SIMPANAN.has(r.kode_d) || AKUN_SIMPANAN.has(r.kode_k)) return 'simpanan'
   // Baris piutang: semua baris yang ada nama anggota (ket diisi) → masuk buku piutang
   if (r.ket && r.ket.trim()) return 'piutang'
   return null
@@ -107,7 +105,7 @@ function AutocompleteInput({
 // Satu baris jurnal — dengan auto-fill kredit dari debit
 // ═══════════════════════════════════════════════════════════════════════
 function JurnalRow({
-  row, allRows, onChange, onRemove, canRemove, anggotaNama, coaOpts,
+  row, allRows, onChange, onRemove, canRemove, anggotaNama, coaOpts, attempted,
 }: {
   row: JurnalBaris
   allRows: JurnalBaris[]
@@ -116,6 +114,7 @@ function JurnalRow({
   canRemove: boolean
   anggotaNama: string[]
   coaOpts: React.ReactNode
+  attempted: boolean
 }) {
   const tag = rowTag(row)
 
@@ -175,11 +174,18 @@ function JurnalRow({
       </div>
 
       {/* Akun Debet */}
-      <select className="input text-xs" value={row.kode_d}
-        onChange={e => onChange(row.id, 'kode_d', e.target.value)}>
-        <option value="">-- Akun Debet --</option>
-        {coaOpts}
-      </select>
+      <div>
+        <select
+          className={`input text-xs ${attempted && !row.kode_d ? 'border-red-400 bg-red-50 focus:border-red-500' : ''}`}
+          value={row.kode_d}
+          onChange={e => onChange(row.id, 'kode_d', e.target.value)}>
+          <option value="">-- Akun Debet * --</option>
+          {coaOpts}
+        </select>
+        {attempted && !row.kode_d && (
+          <p className="text-[10px] text-red-500 mt-0.5">Wajib diisi</p>
+        )}
+      </div>
 
       {/* Nominal Debet — auto-fills kredit */}
       <input
@@ -191,11 +197,18 @@ function JurnalRow({
       />
 
       {/* Akun Kredit */}
-      <select className="input text-xs" value={row.kode_k}
-        onChange={e => onChange(row.id, 'kode_k', e.target.value)}>
-        <option value="">-- Akun Kredit --</option>
-        {coaOpts}
-      </select>
+      <div>
+        <select
+          className={`input text-xs ${attempted && !row.kode_k ? 'border-red-400 bg-red-50 focus:border-red-500' : ''}`}
+          value={row.kode_k}
+          onChange={e => onChange(row.id, 'kode_k', e.target.value)}>
+          <option value="">-- Akun Kredit * --</option>
+          {coaOpts}
+        </select>
+        {attempted && !row.kode_k && (
+          <p className="text-[10px] text-red-500 mt-0.5">Wajib diisi</p>
+        )}
+      </div>
 
       {/* Nominal Kredit — auto-filled dari debet */}
       <input
@@ -227,6 +240,7 @@ export default function JurnalPage() {
   const anggotaNama = useMemo(() => anggota.map(a => a.nama), [anggota])
 
   const [editId,      setEditId]      = useState<number | null>(null)
+  const [attempted,   setAttempted]   = useState(false)
   const today = new Date().toISOString().split('T')[0]
   const [tanggal,     setTanggal]     = useState(today)
   const [nobukti,     setNobukti]     = useState('')
@@ -245,7 +259,7 @@ export default function JurnalPage() {
 
   const reset = () => {
     setEditId(null); setNobukti(''); setKeterangan('')
-    setRows([newRow()])
+    setRows([newRow()]); setAttempted(false)
     setTanggal(new Date().toISOString().split('T')[0])
   }
 
@@ -256,8 +270,14 @@ export default function JurnalPage() {
   }
 
   const save = () => {
+    setAttempted(true)
     if (!tanggal || !nobukti.trim()) { alert('Tanggal dan No. Bukti wajib diisi'); return }
     if (!balanced) { alert('Jurnal tidak seimbang (Debet ≠ Kredit)'); return }
+    const rowKosong = rows.findIndex(r => !r.kode_d || !r.kode_k)
+    if (rowKosong !== -1) {
+      alert(`Baris ${rowKosong + 1}: Akun Debet dan Akun Kredit wajib diisi`)
+      return
+    }
     const entry = { tanggal, nobukti, keterangan, rows, total: totalD }
     editId != null ? updateJurnal(editId, entry) : addJurnal(entry)
     reset()
@@ -353,6 +373,7 @@ export default function JurnalPage() {
               canRemove={rows.length > 1}
               anggotaNama={anggotaNama}
               coaOpts={coaOpts}
+              attempted={attempted}
             />
           ))}
         </div>
