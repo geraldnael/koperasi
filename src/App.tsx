@@ -7,8 +7,9 @@ import AnggotaPage from './pages/AnggotaPage'
 import SaldoAwalPage from './pages/SaldoAwalPage'
 import JurnalPage from './pages/JurnalPage'
 import BukuBesarPage from './pages/BukuBesarPage'
-import { NeracaPage, LabaRugiPage, EkuitasPage, ArusKasPage } from './pages/LaporanPages'
+import { NeracaPage, LabaRugiPage, EkuitasPage, ArusKasPage, NeracaKomparatifPage } from './pages/LaporanPages'
 import { SHUPage, SimpananPage, PiutangSPPage, TokoPage } from './pages/BukuPembantuPages'
+import TutupBukuPage from './pages/TutupBukuPage'
 import { useAppStore } from './store/useAppStore'
 import { supabase, isOnline } from './lib/supabase'
 import {
@@ -27,11 +28,11 @@ function useDebounce(fn: () => void, delay: number) {
 
 export default function App() {
   const [page, setPage] = useState<PageId>('dashboard')
-  const { syncFromSupabase, syncStatus } = useAppStore()
+  const { syncFromSupabase, syncArsipTahun, syncStatus } = useAppStore()
 
   // ── Initial load ────────────────────────────────────────────────────────
   useEffect(() => {
-    if (isOnline()) syncFromSupabase()
+    if (isOnline()) { syncFromSupabase(); syncArsipTahun() }
   }, [])
 
   // ── Granular realtime handlers ──────────────────────────────────────────
@@ -139,10 +140,12 @@ export default function App() {
     ['piutang_sp', <PiutangSPPage />],
     ['toko',       <TokoPage />],
     ['neraca',     <NeracaPage />],
+    ['neraca_komparatif', <NeracaKomparatifPage />],
     ['laba_rugi',  <LabaRugiPage />],
     ['ekuitas',    <EkuitasPage />],
     ['arus_kas',   <ArusKasPage />],
     ['shu',        <SHUPage />],
+    ['tutup_buku', <TutupBukuPage />],
   ]
 
   // ── Sync status label ────────────────────────────────────────────────────

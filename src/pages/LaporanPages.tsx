@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useAppStore } from '../store/useAppStore'
 import { computeSaldos, calcNeraca, calcSHU, fmt, getKasBankMutasi } from '../utils/accounting'
 import { mergeCustomCOA,} from '../utils/coa'
@@ -135,7 +135,7 @@ export function LabaRugiPage() {
   const totalPend        = sum(pendUsaha)     || ['4.1.1','4.1.2','4.1.3','4.1.4','4.1.5','4.1.6','4.1.7','4.1.8'].reduce((s,k)=>s+K(k),0)
   const totalBLangsung   = sum(bebanLangsung) || K('5.1.1') + K('5.1.2')
   const shuKotor         = totalPend - totalBLangsung
-  const totalBUsaha      = sum(bebanUsahaL)   || ['5.1.2','5.1.3','5.1.4','5.1.5','5.1.6'].reduce((s,k)=>s+K(k),0)
+  const totalBUsaha      = sum(bebanUsahaL)   || ['5.1.3','5.1.4','5.1.5','5.1.6'].reduce((s,k)=>s+K(k),0)
   const totalBAdm        = sum(bebanAdmL)     || ['5.1.7','5.1.8','5.1.9','5.1.10','5.1.11','5.1.12','5.1.13','5.1.14','5.1.15'].reduce((s,k)=>s+K(k),0)
   const totalBKop        = sum(bebanKopL)     || ['5.1.16','5.1.17','5.1.18','5.1.19','5.1.20'].reduce((s,k)=>s+K(k),0)
   const jumlahBeban      = totalBLangsung + totalBUsaha + totalBAdm + totalBKop
@@ -178,7 +178,7 @@ export function LabaRugiPage() {
         {/* BEBAN USAHA */}
         <div className="h-2" />
         <LapHeader label="BEBAN USAHA" />
-        {renderAkun(bebanUsahaL, ['5.1.2','5.1.3','5.1.4','5.1.5','5.1.6'])}
+        {renderAkun(bebanUsahaL, ['5.1.3','5.1.4','5.1.5','5.1.6'])}
 
         {/* BEBAN ADMINISTRASI DAN UMUM */}
         <LapHeader label="BEBAN ADMINISTRASI DAN UMUM" />
@@ -487,6 +487,143 @@ export function ArusKasPage() {
           {seimbang ? '✓ Saldo Seimbang' : `⚠ Selisih: Rp ${fmt(Math.abs(kasAkhir - (kasAwal + kenaikanKas)))}`}
         </div>
       </div>
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// 5. NERACA KOMPARATIF — Posisi Keuangan tahun berjalan vs tahun arsip (tutup buku)
+// ─────────────────────────────────────────────────────────────────────────
+function BarisKomparatif({ label, now, prev, indent = 0, variant = 'normal' }:
+  { label: string; now: number; prev: number | null; indent?: number; variant?: 'normal' | 'subtotal' | 'total' }) {
+  const selisih = prev !== null ? now - prev : null
+  const bold = variant === 'total'
+  const sub  = variant === 'subtotal'
+  return (
+    <div className={`grid grid-cols-[1fr_140px_140px_140px] gap-2 py-1 text-sm
+      ${bold ? 'font-bold border-t border-slate-300 mt-1 pt-2' : ''}
+      ${sub ? 'font-semibold border-t border-slate-100 pt-1.5' : ''}`}
+      style={{ paddingLeft: indent ? indent * 16 : 0 }}>
+      <span className="truncate">{label}</span>
+      <span className="text-right">{fmt(now)}</span>
+      <span className="text-right text-slate-500">{prev !== null ? fmt(prev) : '—'}</span>
+      <span className={`text-right ${selisih === null ? 'text-slate-400' : selisih >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+        {selisih === null ? '—' : `${selisih >= 0 ? '+' : ''}${fmt(selisih)}`}
+      </span>
+    </div>
+  )
+}
+
+export function NeracaKomparatifPage() {
+  const { saldoAwal, jurnal, identitas, customCOA, arsipTahun } = useAppStore()
+  const saldos = useMemo(() => computeSaldos(saldoAwal, jurnal, customCOA), [saldoAwal, jurnal, customCOA])
+  const allCOA = useMemo(() => mergeCustomCOA(customCOA), [customCOA])
+
+  const tahunArsipTersedia = useMemo(
+    () => Object.keys(arsipTahun).sort((a, b) => b.localeCompare(a)),
+    [arsipTahun]
+  )
+  const [tahunPembanding, setTahunPembanding] = useState<string>(tahunArsipTersedia[0] ?? '')
+  const arsip = tahunPembanding ? arsipTahun[tahunPembanding] : undefined
+
+  const isKontraAset = (a: Akun) => a.grup === 'ASET' && a.tipe === 'K'
+  const asetLancar    = allCOA.filter(a => a.grup === 'ASET' && a.kelompok === 'Aset Lancar')
+  const asetTdkLancar = allCOA.filter(a => a.grup === 'ASET' && a.kelompok === 'Aset Tidak Lancar')
+  const kewJkPendek   = allCOA.filter(a => a.grup === 'KEWAJIBAN' && a.kelompok === 'Kewajiban Jk. Pendek')
+  const kewJkPanjang  = allCOA.filter(a => a.grup === 'KEWAJIBAN' && a.kelompok === 'Kewajiban Jk. Panjang')
+  const ekuitas       = allCOA.filter(a => a.grup === 'EKUITAS')
+
+  const K  = (kode: string) => saldos[kode] ?? 0
+  const KP = (kode: string): number | null => arsip ? (arsip.saldoAkhir[kode] ?? 0) : null
+
+  const sumNow  = (list: Akun[]) => list.reduce((s, a) => s + (isKontraAset(a) ? -K(a.kode) : K(a.kode)), 0)
+  const sumPrev = (list: Akun[]) => arsip
+    ? list.reduce((s, a) => s + (isKontraAset(a) ? -(KP(a.kode) ?? 0) : (KP(a.kode) ?? 0)), 0)
+    : null
+
+  const totalAsetLancarN = sumNow(asetLancar),    totalAsetLancarP = sumPrev(asetLancar)
+  const totalAsetTdkN    = sumNow(asetTdkLancar), totalAsetTdkP    = sumPrev(asetTdkLancar)
+  const totalAsetN       = totalAsetLancarN + totalAsetTdkN
+  const totalAsetP       = totalAsetLancarP !== null && totalAsetTdkP !== null ? totalAsetLancarP + totalAsetTdkP : null
+
+  const totalKewPendekN  = sumNow(kewJkPendek),  totalKewPendekP  = sumPrev(kewJkPendek)
+  const totalKewPanjangN = sumNow(kewJkPanjang), totalKewPanjangP = sumPrev(kewJkPanjang)
+  const totalKewajibanN  = totalKewPendekN + totalKewPanjangN
+  const totalKewajibanP  = totalKewPendekP !== null && totalKewPanjangP !== null ? totalKewPendekP + totalKewPanjangP : null
+
+  const totalEkuitasN = ekuitas.reduce((s, a) => s + K(a.kode), 0)
+  const totalEkuitasP = arsip ? ekuitas.reduce((s, a) => s + (KP(a.kode) ?? 0), 0) : null
+
+  const renderBaris = (list: Akun[]) =>
+    list.map(a => {
+      const isKontra = isKontraAset(a)
+      const now  = isKontra ? -K(a.kode) : K(a.kode)
+      const prevRaw = KP(a.kode)
+      const prev = prevRaw !== null ? (isKontra ? -prevRaw : prevRaw) : null
+      return <BarisKomparatif key={a.kode} label={`${a.kode} — ${a.nama}`} now={now} prev={prev} indent={1} />
+    })
+
+  return (
+    <div className="p-6 max-w-3xl" id="print-neraca-komparatif">
+      <PageHeader title="Neraca Komparatif" subtitle="Posisi Keuangan tahun berjalan dibandingkan tahun sebelumnya (hasil Tutup Buku)"
+        actions={<div className="no-print"><PrintButton targetId="print-neraca-komparatif" title="Neraca Komparatif" /></div>}
+      />
+
+      {tahunArsipTersedia.length === 0 ? (
+        <div className="card p-5 text-sm text-slate-500">
+          Belum ada arsip tahun sebelumnya. Neraca Komparatif akan otomatis terisi setelah Anda melakukan
+          <strong> Tutup Buku</strong> untuk pertama kali.
+        </div>
+      ) : (
+        <>
+          <div className="card p-4 mb-4 no-print flex items-center gap-3">
+            <label className="text-xs text-slate-500">Bandingkan Tahun {identitas.tahun} dengan:</label>
+            <select className="input text-sm w-48" value={tahunPembanding} onChange={e => setTahunPembanding(e.target.value)}>
+              {tahunArsipTersedia.map(t => <option key={t} value={t}>Tahun {t} (arsip)</option>)}
+            </select>
+          </div>
+
+          <div className="card p-5">
+            <ReportHeader title={identitas.nama} sub={`NERACA KOMPARATIF · ${identitas.tahun} vs ${tahunPembanding}`} />
+            <div className="grid grid-cols-[1fr_140px_140px_140px] gap-2 pb-2 mb-2 border-b border-slate-300 text-[11px] font-semibold text-slate-500 uppercase">
+              <span>Akun</span>
+              <span className="text-right">Tahun {identitas.tahun}</span>
+              <span className="text-right">Tahun {tahunPembanding}</span>
+              <span className="text-right">Selisih</span>
+            </div>
+
+            <LapHeader label="ASET" />
+            <LapHeader label="Aset Lancar" />
+            {renderBaris(asetLancar)}
+            <BarisKomparatif label="Jumlah Aset Lancar" now={totalAsetLancarN} prev={totalAsetLancarP} variant="subtotal" />
+            <LapHeader label="Aset Tidak Lancar" />
+            {renderBaris(asetTdkLancar)}
+            <BarisKomparatif label="Jumlah Aset Tidak Lancar" now={totalAsetTdkN} prev={totalAsetTdkP} variant="subtotal" />
+            <BarisKomparatif label="JUMLAH ASET" now={totalAsetN} prev={totalAsetP} variant="total" />
+
+            <div className="h-4" />
+            <LapHeader label="KEWAJIBAN DAN EKUITAS" />
+            <LapHeader label="Kewajiban Jangka Pendek" />
+            {renderBaris(kewJkPendek)}
+            <BarisKomparatif label="Jumlah Kewajiban Jk. Pendek" now={totalKewPendekN} prev={totalKewPendekP} variant="subtotal" />
+            <LapHeader label="Kewajiban Jangka Panjang" />
+            {renderBaris(kewJkPanjang)}
+            <BarisKomparatif label="Jumlah Kewajiban Jk. Panjang" now={totalKewPanjangN} prev={totalKewPanjangP} variant="subtotal" />
+            <BarisKomparatif label="JUMLAH KEWAJIBAN" now={totalKewajibanN} prev={totalKewajibanP} variant="total" />
+
+            <div className="h-4" />
+            <LapHeader label="EKUITAS" />
+            {ekuitas.map(a => (
+              <BarisKomparatif key={a.kode} label={`${a.kode} — ${a.nama}`} now={K(a.kode)} prev={KP(a.kode)} indent={1} />
+            ))}
+            <BarisKomparatif label="JUMLAH EKUITAS" now={totalEkuitasN} prev={totalEkuitasP} variant="total" />
+            <BarisKomparatif label="JUMLAH KEWAJIBAN + EKUITAS"
+              now={totalKewajibanN + totalEkuitasN}
+              prev={totalKewajibanP !== null && totalEkuitasP !== null ? totalKewajibanP + totalEkuitasP : null}
+              variant="total" />
+          </div>
+        </>
+      )}
     </div>
   )
 }

@@ -48,3 +48,13 @@ export interface AppState {
   jurnal: JurnalEntry[]
   nextId: number
 }
+
+/** Arsip data 1 tahun buku yang sudah ditutup — dasar Neraca Komparatif */
+export interface ArsipTahun {
+  tahun: string
+  identitas: Identitas
+  saldoAwal: Record<string, number>
+  saldoAkhir: Record<string, number>
+  jumlahJurnal: number
+  ditutupPada: string   // ISO timestamp saat tutup buku dilakukan
+}

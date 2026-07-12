@@ -1,7 +1,7 @@
 import {
   LayoutDashboard, Building2, ListTree, Wallet, Users,
   PenLine, BookOpen, Scale, ChartPie, ChartBar, Banknote,
-  Store, CreditCard, PieChart, ChevronRight,
+  Store, CreditCard, PieChart, ChevronRight, GitCompare, Lock,
 } from 'lucide-react'
 import { useAppStore } from '../store/useAppStore'
 
@@ -9,7 +9,8 @@ export type PageId =
   | 'dashboard' | 'identitas' | 'coa' | 'anggota'
   | 'saldo_awal' | 'jurnal' | 'buku_besar'
   | 'simpanan' | 'piutang_sp' | 'toko'
-  | 'neraca' | 'laba_rugi' | 'ekuitas' | 'arus_kas' | 'shu'
+  | 'neraca' | 'neraca_komparatif' | 'laba_rugi' | 'ekuitas' | 'arus_kas' | 'shu'
+  | 'tutup_buku'
 
 interface Props { active: PageId; onChange: (p: PageId) => void }
 
@@ -48,10 +49,17 @@ const sections = [
     label: 'Laporan Keuangan',
     items: [
       { id: 'neraca' as PageId,    label: 'Posisi Keuangan',  icon: Scale },
+      { id: 'neraca_komparatif' as PageId, label: 'Neraca Komparatif', icon: GitCompare },
       { id: 'laba_rugi' as PageId, label: 'Hasil Usaha (PHU)', icon: ChartPie },
       { id: 'ekuitas' as PageId,   label: 'Perubahan Ekuitas', icon: ChartBar },
       { id: 'arus_kas' as PageId,  label: 'Arus Kas',          icon: Banknote },
       { id: 'shu' as PageId,       label: 'Alokasi SHU',       icon: PieChart },
+    ],
+  },
+  {
+    label: 'Akhir Periode',
+    items: [
+      { id: 'tutup_buku' as PageId, label: 'Tutup Buku', icon: Lock },
     ],
   },
 ]

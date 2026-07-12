@@ -1,13 +1,16 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import type { Identitas, JurnalEntry } from '../types'
+import type { Identitas, JurnalEntry, ArsipTahun } from '../types'
 import { ANGGOTA_MASTER } from '../data/anggota'
+import { computeSaldos } from '../utils/accounting'
+import { COA } from '../utils/coa'
 import {
   dbGetIdentitas, dbSetIdentitas,
   dbGetSaldoAwal, dbSetSaldoAwal, dbUpdateSaldoAkun,
-  dbGetJurnal, dbAddJurnal, dbUpdateJurnal, dbDeleteJurnal,
+  dbGetJurnal, dbAddJurnal, dbUpdateJurnal, dbDeleteJurnal, dbClearAllJurnal,
   dbGetSaldoSimpanan, dbUpdateSaldoSimpanan,
   dbGetSaldoPiutang, dbUpdateSaldoPiutang,
+  dbGetArsipTahun, dbSetArsipTahun,
 } from '../lib/db'
 
 // ── Types ─────────────────────────────────────────────────────────────────
@@ -67,6 +70,8 @@ interface AppStore {
   saldoToko: SaldoToko[]
   shuConfig: SHUConfig
   syncStatus: 'idle' | 'loading' | 'synced' | 'error'
+  arsipTahun: Record<string, ArsipTahun>
+  tutupBukuStatus: 'idle' | 'processing' | 'done' | 'error'
 
   // actions
   setIdentitas: (data: Identitas) => void
@@ -84,6 +89,8 @@ interface AppStore {
   updateSaldoToko: (anggotaId: number, saldo: number) => void
   setSHUConfig: (cfg: Partial<SHUConfig>) => void
   syncFromSupabase: () => Promise<void>
+  syncArsipTahun: () => Promise<void>
+  tutupBuku: (tahunBaru: string, awalBaru: string, akhirBaru: string) => Promise<{ ok: boolean; message: string }>
   resetAll: () => void
 }
 
@@ -126,6 +133,8 @@ export const useAppStore = create<AppStore>()(
       saldoToko:     [],
       shuConfig:     defaultSHU,
       syncStatus:    'idle',
+      arsipTahun:    {},
+      tutupBukuStatus: 'idle',
 
       // ── Sync dari Supabase → overwrite state lokal sepenuhnya ────────
       syncFromSupabase: async () => {
@@ -257,6 +266,94 @@ export const useAppStore = create<AppStore>()(
 
       setSHUConfig: (cfg) => set((s) => ({ shuConfig: { ...s.shuConfig, ...cfg } })),
 
+      // ── Arsip Tahun (arsip hasil Tutup Buku, untuk Neraca Komparatif) ──
+      syncArsipTahun: async () => {
+        try {
+          const remote = await dbGetArsipTahun()
+          if (Object.keys(remote).length > 0) {
+            set((s) => ({ arsipTahun: { ...s.arsipTahun, ...remote } }))
+          }
+        } catch (e) {
+          console.error('Sync arsip tahun error:', e)
+        }
+      },
+
+      // ── Tutup Buku — dasar untuk Laporan Posisi Keuangan → Saldo Awal tahun depan ──
+      tutupBuku: async (tahunBaru, awalBaru, akhirBaru) => {
+        const s = get()
+        if (s.jurnal.length === 0) {
+          return { ok: false, message: 'Tidak ada jurnal untuk tahun berjalan. Tutup buku dibatalkan.' }
+        }
+        set({ tutupBukuStatus: 'processing' })
+        try {
+          const allCOA = (() => {
+            const merged = [...COA]
+            s.customCOA.forEach(ca => {
+              const idx = merged.findIndex(a => a.kode === ca.kode)
+              if (idx >= 0) merged[idx] = ca
+              else merged.push(ca)
+            })
+            return merged
+          })()
+
+          // 1) Saldo akhir tahun berjalan = hasil akhir Posisi Keuangan saat ini
+          const saldoAkhir = computeSaldos(s.saldoAwal, s.jurnal, s.customCOA)
+
+          // 2) Arsipkan tahun berjalan (untuk Neraca Komparatif & audit trail)
+          const arsip: ArsipTahun = {
+            tahun: s.identitas.tahun,
+            identitas: { ...s.identitas },
+            saldoAwal: { ...s.saldoAwal },
+            saldoAkhir: { ...saldoAkhir },
+            jumlahJurnal: s.jurnal.length,
+            ditutupPada: new Date().toISOString(),
+          }
+
+          // 3) Saldo awal tahun baru:
+          //    - Aset / Kewajiban / Ekuitas → dibawa (carry forward) apa adanya dari saldo akhir
+          //    - Pendapatan / Beban → akun nominal/sementara, ditutup ke 0 (SHU tahun berjalan
+          //      sudah otomatis terakumulasi ke Ekuitas 3.1.6 lewat perhitungan saldo)
+          const saldoAwalBaru: Record<string, number> = {}
+          allCOA.forEach(a => {
+            saldoAwalBaru[a.kode] = (a.grup === 'PENDAPATAN' || a.grup === 'BEBAN')
+              ? 0
+              : (saldoAkhir[a.kode] ?? 0)
+          })
+
+          const identitasBaru: Identitas = {
+            ...s.identitas,
+            tahun: tahunBaru,
+            awal: awalBaru,
+            akhir: akhirBaru,
+          }
+
+          // 4) Simpan arsip + reset lokal
+          set({
+            arsipTahun: { ...s.arsipTahun, [arsip.tahun]: arsip },
+            saldoAwal: saldoAwalBaru,
+            jurnal: [],
+            nextJurnalId: 1,
+            identitas: identitasBaru,
+            tutupBukuStatus: 'done',
+          })
+
+          // 5) Sinkron ke Supabase (best-effort, tidak menggagalkan proses lokal jika offline)
+          const jurnalIds = s.jurnal.map(j => j.id)
+          await Promise.all([
+            dbSetArsipTahun(arsip.tahun, arsip),
+            dbSetSaldoAwal(saldoAwalBaru),
+            dbSetIdentitas(identitasBaru),
+            dbClearAllJurnal(jurnalIds),
+          ]).catch(e => console.error('Tutup buku sync error:', e))
+
+          return { ok: true, message: `Tutup buku tahun ${arsip.tahun} berhasil. Saldo awal ${tahunBaru} sudah terisi otomatis.` }
+        } catch (e) {
+          console.error('Tutup buku error:', e)
+          set({ tutupBukuStatus: 'error' })
+          return { ok: false, message: 'Terjadi kesalahan saat tutup buku. Data tidak diubah.' }
+        }
+      },
+
       resetAll: () => set({
         identitas: defaultIdentitas,
         anggota: defaultAnggota,
@@ -270,6 +367,8 @@ export const useAppStore = create<AppStore>()(
         saldoToko: [],
         shuConfig: defaultSHU,
         syncStatus: 'idle',
+        arsipTahun: {},
+        tutupBukuStatus: 'idle',
       }),
     }),
     { name: 'sia-koperasi-v5' }

@@ -3,7 +3,7 @@
  * Setiap fungsi punya fallback localStorage jika offline/belum dikonfigurasi
  */
 import { supabase, isOnline } from './supabase'
-import type { Identitas, JurnalEntry } from '../types'
+import type { Identitas, JurnalEntry, ArsipTahun } from '../types'
 import type { SaldoSimpanan } from '../store/useAppStore'
 
 // ── IDENTITAS ─────────────────────────────────────────────────────────────
@@ -143,6 +143,37 @@ export async function dbUpdateSaldoPiutang(anggotaId: number, saldoAwal: number,
     { anggota_no: anggotaId, saldo_awal: saldoAwal, saldo_awal_jasa: saldoAwalJasa, updated_at: new Date().toISOString() },
     { onConflict: 'anggota_no' }
   )
+}
+
+// ── ARSIP TAHUN (Tutup Buku) ────────────────────────────────────────────────
+// Tabel opsional — kalau belum dibuat di Supabase, fungsi ini otomatis no-op
+// dan arsip tetap tersimpan lokal (localStorage) lewat zustand persist.
+export async function dbGetArsipTahun(): Promise<Record<string, ArsipTahun>> {
+  if (!isOnline()) return {}
+  try {
+    const { data, error } = await supabase.from('arsip_tahun').select('tahun, data')
+    if (error || !data) return {}
+    return Object.fromEntries(data.map(r => [r.tahun, r.data]))
+  } catch {
+    return {}
+  }
+}
+
+export async function dbSetArsipTahun(tahun: string, arsip: ArsipTahun) {
+  if (!isOnline()) return
+  try {
+    await supabase.from('arsip_tahun').upsert({
+      tahun, data: arsip, updated_at: new Date().toISOString(),
+    }, { onConflict: 'tahun' })
+  } catch {
+    // Tabel belum ada / offline — arsip tetap aman di localStorage
+  }
+}
+
+// Hapus semua jurnal tahun berjalan sekaligus (dipakai saat Tutup Buku)
+export async function dbClearAllJurnal(ids: number[]) {
+  if (!isOnline() || ids.length === 0) return
+  await supabase.from('jurnal').delete().in('id', ids)
 }
 
 // ── GRANULAR FETCH (untuk realtime partial update) ────────────────────────
