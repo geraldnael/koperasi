@@ -11,6 +11,7 @@ import {
   dbGetSaldoSimpanan, dbUpdateSaldoSimpanan,
   dbGetSaldoPiutang, dbUpdateSaldoPiutang,
   dbGetArsipTahun, dbSetArsipTahun,
+  dbGetAnggota, dbAddAnggota, dbUpdateAnggota, dbDeleteAnggota, dbSeedAnggotaIfEmpty,
 } from '../lib/db'
 
 // ── Types ─────────────────────────────────────────────────────────────────
@@ -75,15 +76,15 @@ interface AppStore {
 
   // actions
   setIdentitas: (data: Identitas) => void
-  addAnggota: (a: Omit<Anggota, 'id'>) => void
+  addAnggota: (a: Omit<Anggota, 'id'>) => Promise<void>
   updateAnggota: (id: number, data: Partial<Omit<Anggota, 'id'>>) => void
   deleteAnggota: (id: number) => void
   setCustomCOA: (akun: import('../types').Akun[]) => void
   setSaldoAwal: (saldo: Record<string, number>) => void
   updateSaldoAkun: (kode: string, val: number) => void
-  addJurnal: (entry: Omit<JurnalEntry, 'id'>) => void
-  updateJurnal: (id: number, entry: Omit<JurnalEntry, 'id'>) => void
-  deleteJurnal: (id: number) => void
+  addJurnal: (entry: Omit<JurnalEntry, 'id'>) => Promise<void>
+  updateJurnal: (id: number, entry: Omit<JurnalEntry, 'id'>) => Promise<void>
+  deleteJurnal: (id: number) => Promise<void>
   updateSaldoSimpanan: (anggotaId: number, data: Partial<Omit<SaldoSimpanan, 'anggotaId'>>) => void
   updatePiutangSP: (anggotaId: number, saldo: number, saldoJasa?: number) => void
   updateSaldoToko: (anggotaId: number, saldo: number) => void
@@ -140,12 +141,17 @@ export const useAppStore = create<AppStore>()(
       syncFromSupabase: async () => {
         set({ syncStatus: 'loading' })
         try {
-          const [identitas, saldoAwal, jurnal, saldoSimpanan, piutangSP] = await Promise.all([
+          // Isi otomatis 484 nama anggota awal ke server kalau tabel masih
+          // kosong (first-run), supaya tidak perlu input manual satu-satu
+          await dbSeedAnggotaIfEmpty(get().anggota).catch(() => {})
+
+          const [identitas, saldoAwal, jurnal, saldoSimpanan, piutangSP, anggota] = await Promise.all([
             dbGetIdentitas(),
             dbGetSaldoAwal(),
             dbGetJurnal(),
             dbGetSaldoSimpanan(),
             dbGetSaldoPiutang(),
+            dbGetAnggota(),
           ])
 
           // Selalu overwrite — termasuk saat ada DELETE di device lain
@@ -161,6 +167,10 @@ export const useAppStore = create<AppStore>()(
             piutangSP:     piutangSP.length > 0
                              ? piutangSP
                              : get().piutangSP,
+            anggota:       anggota.length > 0 ? anggota : get().anggota,
+            nextAnggotaId: anggota.length > 0
+                             ? Math.max(...anggota.map(a => a.id)) + 1
+                             : get().nextAnggotaId,
           })
         } catch (e) {
           console.error('Sync error:', e)
@@ -175,16 +185,41 @@ export const useAppStore = create<AppStore>()(
       },
 
       // ── Anggota ───────────────────────────────────────────────────────
-      addAnggota: (a) => set((s) => ({
-        anggota: [...s.anggota, { ...a, id: s.nextAnggotaId }],
-        nextAnggotaId: s.nextAnggotaId + 1,
-      })),
-      updateAnggota: (id, data) => set((s) => ({
-        anggota: s.anggota.map(a => a.id === id ? { ...a, ...data } : a),
-      })),
-      deleteAnggota: (id) => set((s) => ({
-        anggota: s.anggota.filter(a => a.id !== id),
-      })),
+      addAnggota: async (a) => {
+        // Optimistic update dulu
+        const tmpId = get().nextAnggotaId
+        set((s) => ({
+          anggota: [...s.anggota, { ...a, id: tmpId }],
+          nextAnggotaId: s.nextAnggotaId + 1,
+        }))
+        try {
+          const realId = await dbAddAnggota(a)
+          set((s) => ({
+            anggota: s.anggota.map(x => x.id === tmpId ? { ...x, id: realId } : x),
+          }))
+        } catch (e) {
+          console.error('Gagal simpan anggota ke server:', e)
+          alert('Anggota tersimpan di perangkat ini, tapi GAGAL tersinkron ke server (cek koneksi internet). Data bisa hilang saat sinkron ulang — coba simpan lagi setelah koneksi normal.')
+        }
+      },
+      updateAnggota: (id, data) => {
+        set((s) => ({
+          anggota: s.anggota.map(a => a.id === id ? { ...a, ...data } : a),
+        }))
+        dbUpdateAnggota(id, data).catch(e => {
+          console.error('Gagal update anggota ke server:', e)
+          alert('Perubahan tersimpan di perangkat ini, tapi GAGAL tersinkron ke server (cek koneksi internet).')
+        })
+      },
+      deleteAnggota: (id) => {
+        set((s) => ({
+          anggota: s.anggota.filter(a => a.id !== id),
+        }))
+        dbDeleteAnggota(id).catch(e => {
+          console.error('Gagal hapus anggota di server:', e)
+          alert('Anggota terhapus di perangkat ini, tapi GAGAL tersinkron ke server (cek koneksi internet). Anggota bisa muncul lagi saat sinkron ulang.')
+        })
+      },
 
       // ── Saldo Awal ────────────────────────────────────────────────────
       setCustomCOA: (akun) => {
@@ -193,11 +228,17 @@ export const useAppStore = create<AppStore>()(
       },
       setSaldoAwal: (saldo) => {
         set({ saldoAwal: saldo })
-        dbSetSaldoAwal(saldo)
+        dbSetSaldoAwal(saldo).catch(e => {
+          console.error('Gagal simpan saldo awal ke server:', e)
+          alert('GAGAL menyimpan Saldo Awal ke server (cek koneksi internet). Perubahan bisa hilang saat sinkron ulang — coba simpan lagi setelah koneksi normal.')
+        })
       },
       updateSaldoAkun: (kode, val) => {
         set((s) => ({ saldoAwal: { ...s.saldoAwal, [kode]: val } }))
-        dbUpdateSaldoAkun(kode, val)
+        dbUpdateSaldoAkun(kode, val).catch(e => {
+          console.error('Gagal simpan saldo akun ke server:', e)
+          alert('GAGAL menyimpan perubahan saldo ke server (cek koneksi internet). Perubahan bisa hilang saat sinkron ulang — coba simpan lagi setelah koneksi normal.')
+        })
       },
 
       // ── Jurnal ────────────────────────────────────────────────────────
@@ -208,21 +249,43 @@ export const useAppStore = create<AppStore>()(
           jurnal: [{ ...entry, id: tmpId }, ...s.jurnal],
           nextJurnalId: s.nextJurnalId + 1,
         }))
-        // Simpan ke Supabase, update id dengan id asli
-        const realId = await dbAddJurnal(entry)
-        set((s) => ({
-          jurnal: s.jurnal.map(j => j.id === tmpId ? { ...j, id: realId } : j),
-        }))
+        try {
+          // Simpan ke Supabase, update id dengan id asli
+          const realId = await dbAddJurnal(entry)
+          set((s) => ({
+            jurnal: s.jurnal.map(j => j.id === tmpId ? { ...j, id: realId } : j),
+          }))
+        } catch (e) {
+          // GAGAL simpan ke server → batalkan entri optimistik supaya tidak
+          // "menghilang diam-diam" saat sinkronisasi berikutnya menimpa state lokal
+          console.error('Gagal simpan jurnal ke server:', e)
+          set((s) => ({ jurnal: s.jurnal.filter(j => j.id !== tmpId) }))
+          alert('GAGAL menyimpan jurnal ke server (cek koneksi internet). Entri ini TIDAK tersimpan — silakan input ulang setelah koneksi normal.')
+        }
       },
-      updateJurnal: (id, entry) => {
+      updateJurnal: async (id, entry) => {
+        const prev = get().jurnal.find(j => j.id === id)
         set((s) => ({
           jurnal: s.jurnal.map(j => j.id === id ? { ...j, ...entry } : j),
         }))
-        dbUpdateJurnal(id, entry)
+        try {
+          await dbUpdateJurnal(id, entry)
+        } catch (e) {
+          console.error('Gagal update jurnal ke server:', e)
+          if (prev) set((s) => ({ jurnal: s.jurnal.map(j => j.id === id ? prev : j) }))
+          alert('GAGAL menyimpan perubahan jurnal ke server (cek koneksi internet). Perubahan dibatalkan — silakan coba lagi.')
+        }
       },
-      deleteJurnal: (id) => {
+      deleteJurnal: async (id) => {
+        const prev = get().jurnal.find(j => j.id === id)
         set((s) => ({ jurnal: s.jurnal.filter(j => j.id !== id) }))
-        dbDeleteJurnal(id)
+        try {
+          await dbDeleteJurnal(id)
+        } catch (e) {
+          console.error('Gagal hapus jurnal di server:', e)
+          if (prev) set((s) => ({ jurnal: [...s.jurnal, prev].sort((a, b) => b.id - a.id) }))
+          alert('GAGAL menghapus jurnal di server (cek koneksi internet). Jurnal dikembalikan — silakan coba lagi.')
+        }
       },
 
       // ── Saldo Simpanan ────────────────────────────────────────────────
@@ -234,7 +297,10 @@ export const useAppStore = create<AppStore>()(
             : [...s.saldoSimpanan, { anggotaId, pokok:0, wajib:0, wajib_khs:0, sukarela:0, jasa_suk:0, tht:0, jasa_tht:0, pinjaman:0, ...data }]
           // Sync ke Supabase
           const record = updated.find(x => x.anggotaId === anggotaId)
-          if (record) dbUpdateSaldoSimpanan(record)
+          if (record) dbUpdateSaldoSimpanan(record).catch(e => {
+            console.error('Gagal simpan saldo simpanan ke server:', e)
+            alert('GAGAL menyimpan saldo simpanan ke server (cek koneksi internet). Perubahan bisa hilang saat sinkron ulang — coba simpan lagi setelah koneksi normal.')
+          })
           return { saldoSimpanan: updated }
         })
       },
@@ -249,7 +315,10 @@ export const useAppStore = create<AppStore>()(
                 ? { ...p, saldoAwal: saldo, saldoAwalJasa: newJasa }
                 : p)
             : [...s.piutangSP, { anggotaId, saldoAwal: saldo, saldoAwalJasa: newJasa }]
-          dbUpdateSaldoPiutang(anggotaId, saldo, newJasa)
+          dbUpdateSaldoPiutang(anggotaId, saldo, newJasa).catch(e => {
+            console.error('Gagal simpan saldo piutang ke server:', e)
+            alert('GAGAL menyimpan saldo piutang ke server (cek koneksi internet). Perubahan bisa hilang saat sinkron ulang — coba simpan lagi setelah koneksi normal.')
+          })
           return { piutangSP: updated }
         })
       },

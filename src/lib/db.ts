@@ -4,7 +4,7 @@
  */
 import { supabase, isOnline } from './supabase'
 import type { Identitas, JurnalEntry, ArsipTahun } from '../types'
-import type { SaldoSimpanan } from '../store/useAppStore'
+import type { SaldoSimpanan, Anggota } from '../store/useAppStore'
 
 // ── IDENTITAS ─────────────────────────────────────────────────────────────
 export async function dbGetIdentitas(): Promise<Identitas | null> {
@@ -143,6 +143,61 @@ export async function dbUpdateSaldoPiutang(anggotaId: number, saldoAwal: number,
     { anggota_no: anggotaId, saldo_awal: saldoAwal, saldo_awal_jasa: saldoAwalJasa, updated_at: new Date().toISOString() },
     { onConflict: 'anggota_no' }
   )
+}
+
+// ── ANGGOTA ───────────────────────────────────────────────────────────────
+export async function dbGetAnggota(): Promise<Anggota[]> {
+  if (!isOnline()) return []
+  const { data, error } = await supabase.from('anggota').select('*').order('id', { ascending: true })
+  if (error || !data) return []
+  return data.map(r => ({
+    id: r.id, noAnggota: r.no_anggota ?? String(r.id),
+    nama: r.nama, alamat: r.alamat ?? '', telepon: r.telepon ?? '', email: r.email ?? '',
+  }))
+}
+
+export async function dbAddAnggota(a: Omit<Anggota, 'id'>): Promise<number> {
+  if (!isOnline()) return Date.now()
+  const { data, error } = await supabase.from('anggota').insert({
+    no_anggota: a.noAnggota, nama: a.nama, alamat: a.alamat, telepon: a.telepon, email: a.email,
+  }).select('id').single()
+  if (error) throw error
+  return data.id
+}
+
+export async function dbUpdateAnggota(id: number, data: Partial<Omit<Anggota, 'id'>>) {
+  if (!isOnline()) return
+  const payload: Record<string, unknown> = { updated_at: new Date().toISOString() }
+  if (data.noAnggota !== undefined) payload.no_anggota = data.noAnggota
+  if (data.nama      !== undefined) payload.nama       = data.nama
+  if (data.alamat    !== undefined) payload.alamat     = data.alamat
+  if (data.telepon   !== undefined) payload.telepon    = data.telepon
+  if (data.email     !== undefined) payload.email      = data.email
+  const { error } = await supabase.from('anggota').update(payload).eq('id', id)
+  if (error) throw error
+}
+
+export async function dbDeleteAnggota(id: number) {
+  if (!isOnline()) return
+  const { error } = await supabase.from('anggota').delete().eq('id', id)
+  if (error) throw error
+}
+
+// Isi awal tabel anggota di Supabase dari daftar master lokal — hanya
+// dijalankan sekali otomatis kalau tabel `anggota` remote masih kosong,
+// supaya 484 nama anggota awal ikut tersinkron ke server (bukan cuma di
+// browser). Dipakai saat online pertama kali.
+export async function dbSeedAnggotaIfEmpty(list: Anggota[]) {
+  if (!isOnline() || list.length === 0) return false
+  const { count } = await supabase.from('anggota').select('id', { count: 'exact', head: true })
+  if (count && count > 0) return false
+  const rows = list.map(a => ({
+    id: a.id, no_anggota: a.noAnggota, nama: a.nama,
+    alamat: a.alamat, telepon: a.telepon, email: a.email,
+  }))
+  const { error } = await supabase.from('anggota').insert(rows)
+  if (error) { console.error('Seed anggota error:', error); return false }
+  return true
 }
 
 // ── ARSIP TAHUN (Tutup Buku) ────────────────────────────────────────────────
