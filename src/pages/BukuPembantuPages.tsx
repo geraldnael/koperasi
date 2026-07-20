@@ -292,6 +292,8 @@ export function SimpananPage() {
   }, [updateSaldoSimpanan])
   const [search,  setSearch]  = useState('')
   const [activeTab, setActiveTab] = useState<TabKey>('rekap')
+  const [page,       setPage]     = useState(1)
+  const [perPage]                 = useState(20)
 
   // Saldo awal per anggota
   const saldoMap = useMemo(() => {
@@ -352,6 +354,14 @@ export function SimpananPage() {
   const filtered = useMemo(() =>
     search ? rows.filter(r => r.nama.toLowerCase().includes(search.toLowerCase())) : rows,
     [rows, search])
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / perPage))
+  const paginated  = useMemo(() =>
+    filtered.slice((page - 1) * perPage, page * perPage),
+    [filtered, page, perPage])
+
+  // Reset ke halaman 1 setiap kali pencarian atau tab berganti
+  React.useEffect(() => { setPage(1) }, [search, activeTab])
 
   // ── Totals ──
   const totals = useMemo(() => {
@@ -416,9 +426,9 @@ export function SimpananPage() {
           </tr>
         </thead>
         <tbody>
-          {filtered.map((r, i) => (
+          {paginated.map((r, i) => (
             <tr key={r.id} className="border-b border-slate-100 hover:bg-slate-50">
-              <td className="td text-slate-400 border border-slate-100 text-center">{i+1}</td>
+              <td className="td text-slate-400 border border-slate-100 text-center">{(page-1)*perPage + i + 1}</td>
               <td className="td border border-slate-100 font-medium">{r.nama}</td>
               <td className="td-num border border-slate-100 text-blue-700">{r.pokok ? fmt(r.pokok) : '—'}</td>
               <td className="td-num border border-slate-100 text-emerald-700">{r.wajib ? fmt(r.wajib) : '—'}</td>
@@ -488,13 +498,13 @@ export function SimpananPage() {
             </tr>
           </thead>
           <tbody>
-            {filtered.map((r, i) => {
+            {paginated.map((r, i) => {
               const sa  = getSA(r)
               const akh = getAkh(r)
               let jum = 0; for(let b=1;b<=12;b++) jum+=getMut(r,b)
               return (
                 <tr key={r.id} className="border-b border-slate-100 hover:bg-slate-50">
-                  <td className="td text-slate-400 border border-slate-100 text-center">{i+1}</td>
+                  <td className="td text-slate-400 border border-slate-100 text-center">{(page-1)*perPage + i + 1}</td>
                   <td className="td border border-slate-100 font-medium">{r.nama}</td>
                   <td className="td-num border border-slate-100 p-0.5">
                     <SaldoAwalInput anggotaId={r.id} field={isPokok ? 'pokok' : t.key as any} value={sa} onSave={onSaveSA} />
@@ -589,13 +599,13 @@ export function SimpananPage() {
             </tr>
           </thead>
           <tbody>
-            {filtered.map((r, i) => {
+            {paginated.map((r, i) => {
               const sa=getSA(r), saJ=getSAJasa(r), akh=getAkh(r), akhJ=getAkhJasa(r)
               let jum=0, jumJ=0
               for(let b=1;b<=12;b++){jum+=getMut(r,b); jumJ+=getMutJasa(r,b)}
               return (
                 <tr key={r.id} className="border-b border-slate-100 hover:bg-slate-50">
-                  <td className="td text-slate-400 border border-slate-100 text-center">{i+1}</td>
+                  <td className="td text-slate-400 border border-slate-100 text-center">{(page-1)*perPage + i + 1}</td>
                   <td className="td border border-slate-100 font-medium">{r.nama}</td>
                   <td className="td-num border border-slate-100 p-0.5">
                     <SaldoAwalInput anggotaId={r.id} field={t.key as any} value={sa} onSave={onSaveSA} />
@@ -665,7 +675,7 @@ export function SimpananPage() {
       <div className="flex flex-wrap gap-3 items-center mb-3 no-print">
         <input className="input max-w-xs" placeholder="Cari nama anggota..."
           value={search} onChange={e => setSearch(e.target.value)} />
-        <span className="text-xs text-slate-400">{filtered.length} anggota</span>
+        <span className="text-xs text-slate-400">{filtered.length} anggota total</span>
         <button className="btn btn-sm ml-auto"
           onClick={() => printElement('simpanan-print-area', `Simpanan Anggota — ${tab.label}`, identitas.nama)}>
           🖨️ Cetak
@@ -693,6 +703,26 @@ export function SimpananPage() {
           <p className="text-xs text-slate-500">{identitas.nama || 'KOPERASI'} — {identitas.akhir ? `Per ${identitas.akhir}` : `Tahun ${identitas.tahun}`}</p>
         </div>
         {renderTable()}
+
+        <div className="flex justify-between items-center mt-3 no-print">
+          <span className="text-xs text-slate-400">
+            Menampilkan {filtered.length === 0 ? 0 : (page-1)*perPage+1}–{Math.min(page*perPage, filtered.length)} dari {filtered.length} anggota
+          </span>
+          <div className="flex gap-1">
+            <button className="btn btn-sm px-2" disabled={page<=1} onClick={()=>setPage(1)}>«</button>
+            <button className="btn btn-sm px-2" disabled={page<=1} onClick={()=>setPage(p=>p-1)}>‹</button>
+            {Array.from({length:Math.min(5,totalPages)},(_,i)=>{
+              const pg = Math.max(1, Math.min(totalPages-4, page-2)) + i
+              return (
+                <button key={pg}
+                  className={`btn btn-sm px-2.5 ${pg===page?'btn-primary':''}`}
+                  onClick={()=>setPage(pg)}>{pg}</button>
+              )
+            })}
+            <button className="btn btn-sm px-2" disabled={page>=totalPages} onClick={()=>setPage(p=>p+1)}>›</button>
+            <button className="btn btn-sm px-2" disabled={page>=totalPages} onClick={()=>setPage(totalPages)}>»</button>
+          </div>
+        </div>
         <p className="text-xs text-slate-400 mt-3 no-print">
           💡 Pilih tab di atas untuk berpindah antar jenis simpanan.
         </p>
@@ -1407,3 +1437,4 @@ export function TokoPage() {
     </div>
   )
 }
+
