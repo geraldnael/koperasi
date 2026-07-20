@@ -156,13 +156,12 @@ export async function dbGetAnggota(): Promise<Anggota[]> {
   }))
 }
 
-export async function dbAddAnggota(a: Omit<Anggota, 'id'>): Promise<number> {
-  if (!isOnline()) return Date.now()
-  const { data, error } = await supabase.from('anggota').insert({
-    no_anggota: a.noAnggota, nama: a.nama, alamat: a.alamat, telepon: a.telepon, email: a.email,
-  }).select('id').single()
+export async function dbAddAnggota(a: Anggota): Promise<void> {
+  if (!isOnline()) return
+  const { error } = await supabase.from('anggota').insert({
+    id: a.id, no_anggota: a.noAnggota, nama: a.nama, alamat: a.alamat, telepon: a.telepon, email: a.email,
+  })
   if (error) throw error
-  return data.id
 }
 
 export async function dbUpdateAnggota(id: number, data: Partial<Omit<Anggota, 'id'>>) {

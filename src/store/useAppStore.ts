@@ -186,17 +186,17 @@ export const useAppStore = create<AppStore>()(
 
       // ── Anggota ───────────────────────────────────────────────────────
       addAnggota: async (a) => {
-        // Optimistic update dulu
-        const tmpId = get().nextAnggotaId
+        // ID ditentukan sekali di aplikasi (bukan menunggu server), supaya
+        // tidak bergantung pada auto-increment database — konsisten dengan
+        // data anggota lama yang ID-nya sudah baku dipakai di Simpanan/Piutang.
+        const id = get().nextAnggotaId
+        const newAnggota: Anggota = { ...a, id }
         set((s) => ({
-          anggota: [...s.anggota, { ...a, id: tmpId }],
+          anggota: [...s.anggota, newAnggota],
           nextAnggotaId: s.nextAnggotaId + 1,
         }))
         try {
-          const realId = await dbAddAnggota(a)
-          set((s) => ({
-            anggota: s.anggota.map(x => x.id === tmpId ? { ...x, id: realId } : x),
-          }))
+          await dbAddAnggota(newAnggota)
         } catch (e) {
           console.error('Gagal simpan anggota ke server:', e)
           alert('Anggota tersimpan di perangkat ini, tapi GAGAL tersinkron ke server (cek koneksi internet). Data bisa hilang saat sinkron ulang — coba simpan lagi setelah koneksi normal.')
