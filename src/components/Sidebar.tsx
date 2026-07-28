@@ -81,7 +81,7 @@ export default function Sidebar({ active, onChange }: Props) {
           {identitas.nama || 'KOPERASI'}
         </p>
         <p className="text-[11px] text-slate-400 mt-0.5">
-          Periode {identitas.tahun || '2024'}
+          Periode {identitas.tahun || new Date().getFullYear()}
         </p>
         <div className="mt-1.5 flex items-center gap-1">
           <span className="badge badge-blue text-[10px]">SAK EP</span>
@@ -116,7 +116,7 @@ export default function Sidebar({ active, onChange }: Props) {
       </nav>
 
       <div className="px-3 py-2 border-t border-slate-100 text-[10px] text-slate-400 text-center">
-        KKP RS. Soeharto Heerdjan Jakarta
+        Dinas Koperasi & UM Kab. Kediri
       </div>
     </aside>
   )

@@ -96,12 +96,18 @@ interface AppStore {
 }
 
 // ── Defaults ──────────────────────────────────────────────────────────────
+// Tahun buku default mengikuti tahun berjalan (real-world), bukan angka
+// statis — supaya instalasi baru otomatis mulai di periode yang benar,
+// tanpa perlu diubah manual. Setelah identitas diisi/disinkron dari server,
+// atau setelah Tutup Buku, nilai ini otomatis tidak dipakai lagi.
+const TAHUN_BERJALAN = String(new Date().getFullYear())
+
 const defaultIdentitas: Identitas = {
   nama: 'KOPERASI PEGAWAI DAN PENSIUNAN RUMAH SAKIT SOEHARTO HEERDJAN',
   bh: '-', alamat: 'Jl. Contoh No.1',
   kelurahan: '-', kecamatan: '-', kota: 'Jakarta',
   ketua: '-', bendahara: '-', sekretaris: '-',
-  tahun: '2025', awal: '2025-01-01', akhir: '2025-12-31',
+  tahun: TAHUN_BERJALAN, awal: `${TAHUN_BERJALAN}-01-01`, akhir: `${TAHUN_BERJALAN}-12-31`,
 }
 
 const defaultSHU: SHUConfig = {
