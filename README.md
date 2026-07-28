@@ -1,8 +1,8 @@
-# 🏦 Bela SAKEP — Sistem Informasi Akuntansi Koperasi
+# 🏦 SmartSAK EP — Sistem Informasi Akuntansi Koperasi
 
 Aplikasi web laporan keuangan koperasi berbasis **SAK EP** (Standar Akuntansi Keuangan Entitas Privat), sesuai **Peraturan Menteri Koperasi No. 2 Tahun 2024**.
 
-> Dikembangkan untuk mendukung platform **Bela SAKEP** — Dinas Koperasi & Usaha Mikro Kabupaten Kediri.
+> Dikembangkan untuk mendukung platform **SmartSAK EP** — Dinas Koperasi & Usaha Mikro Kabupaten Kediri.
 
 [![Deploy Status](https://github.com/YOUR-USERNAME/sia-koperasi/actions/workflows/deploy.yml/badge.svg)](https://github.com/YOUR-USERNAME/sia-koperasi/actions)
 
@@ -14,24 +14,24 @@ Aplikasi web laporan keuangan koperasi berbasis **SAK EP** (Standar Akuntansi Ke
 
 ## ✨ Fitur
 
-| Modul | Fitur |
-|---|---|
-| **Profil Koperasi** | Identitas, pengurus, periode akuntansi |
-| **Bagan Akun (COA)** | 74 akun SAK EP standar (1.1.x – 5.2.x) |
-| **Data Anggota** | Master data anggota koperasi |
-| **Saldo Awal** | Input saldo pembuka dengan validasi D=K |
-| **Jurnal Umum** | Double-entry, validasi balance real-time |
-| **Buku Besar** | Filter per akun & tanggal, saldo berjalan |
-| **Simpanan** | Rekap simpanan pokok, wajib, sukarela |
-| **Piutang SP** | Buku pembantu piutang simpan pinjam |
-| **Toko** | Rekap penjualan & piutang toko |
-| **Neraca** | Laporan Posisi Keuangan SAK EP |
-| **PHU/SHU** | Laporan Hasil Usaha + Perhitungan SHU |
-| **Ekuitas** | Laporan Perubahan Ekuitas |
-| **Arus Kas** | Metode Langsung (3 aktivitas) |
-| **Alokasi SHU** | Pembagian SHU per anggota |
-| **Ekspor Excel** | Download .xlsx semua laporan |
-| **Cetak** | Print-friendly CSS |
+| Modul                | Fitur                                     |
+| -------------------- | ----------------------------------------- |
+| **Profil Koperasi**  | Identitas, pengurus, periode akuntansi    |
+| **Bagan Akun (COA)** | 74 akun SAK EP standar (1.1.x – 5.2.x)    |
+| **Data Anggota**     | Master data anggota koperasi              |
+| **Saldo Awal**       | Input saldo pembuka dengan validasi D=K   |
+| **Jurnal Umum**      | Double-entry, validasi balance real-time  |
+| **Buku Besar**       | Filter per akun & tanggal, saldo berjalan |
+| **Simpanan**         | Rekap simpanan pokok, wajib, sukarela     |
+| **Piutang SP**       | Buku pembantu piutang simpan pinjam       |
+| **Toko**             | Rekap penjualan & piutang toko            |
+| **Neraca**           | Laporan Posisi Keuangan SAK EP            |
+| **PHU/SHU**          | Laporan Hasil Usaha + Perhitungan SHU     |
+| **Ekuitas**          | Laporan Perubahan Ekuitas                 |
+| **Arus Kas**         | Metode Langsung (3 aktivitas)             |
+| **Alokasi SHU**      | Pembagian SHU per anggota                 |
+| **Ekspor Excel**     | Download .xlsx semua laporan              |
+| **Cetak**            | Print-friendly CSS                        |
 
 ---
 
@@ -76,7 +76,7 @@ npm run preview
 ```bash
 git init
 git add .
-git commit -m "feat: initial Bela SAKEP SIA"
+git commit -m "feat: initial SmartSAK EP SIA"
 git remote add origin https://github.com/YOUR-USERNAME/sia-koperasi.git
 git push -u origin main
 ```
@@ -92,9 +92,9 @@ git push -u origin main
 ```ts
 // vite.config.ts
 export default defineConfig({
-  base: '/sia-koperasi/',  // ← ganti dengan nama repo kamu
+  base: "/sia-koperasi/", // ← ganti dengan nama repo kamu
   plugins: [react()],
-})
+});
 ```
 
 ### Langkah 4 — Push & Deploy Otomatis

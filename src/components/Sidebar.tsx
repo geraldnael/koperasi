@@ -75,7 +75,7 @@ export default function Sidebar({ active, onChange }: Props) {
           <div className="w-7 h-7 rounded-lg bg-blue-600 flex items-center justify-center">
             <Scale size={14} className="text-white" />
           </div>
-          <span className="text-xs font-semibold text-blue-700 uppercase tracking-wide">Bela SAKEP</span>
+          <span className="text-xs font-semibold text-blue-700 uppercase tracking-wide">SmartSAK EP</span>
         </div>
         <p className="text-xs font-medium text-slate-800 leading-tight line-clamp-2">
           {identitas.nama || 'KOPERASI'}
@@ -116,7 +116,7 @@ export default function Sidebar({ active, onChange }: Props) {
       </nav>
 
       <div className="px-3 py-2 border-t border-slate-100 text-[10px] text-slate-400 text-center">
-        Dinas Koperasi & UM Kab. Kediri
+        KKP RS. Soeharto Heerdjan Jakarta
       </div>
     </aside>
   )
