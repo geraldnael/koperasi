@@ -116,7 +116,7 @@ export default function Sidebar({ active, onChange }: Props) {
       </nav>
 
       <div className="px-3 py-2 border-t border-slate-100 text-[10px] text-slate-400 text-center">
-        Dinas Koperasi & UM Kab. Kediri
+        KKP RS. Soeharto Heerdjan Jakarta
       </div>
     </aside>
   )
