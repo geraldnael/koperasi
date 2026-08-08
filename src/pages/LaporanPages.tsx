@@ -2,8 +2,9 @@ import { useMemo, useState } from 'react'
 import { useAppStore } from '../store/useAppStore'
 import { computeSaldos, calcNeraca, calcSHU, fmt, getKasBankMutasi } from '../utils/accounting'
 import { mergeCustomCOA,} from '../utils/coa'
+import { startOfMonthStr, endOfMonthStr, formatTanggalIndo } from '../utils/periode'
 import type { Akun } from '../types'
-import { PageHeader, PrintButton, DownloadButton, LapRow, LapHeader } from '../components/ui'
+import { PageHeader, PrintButton, DownloadButton, LapRow, LapHeader, PeriodeFilterBar } from '../components/ui'
 import { exportNeraca, exportSHU } from '../utils/exportExcel'
 
 function ReportHeader({ title, sub }: { title: string; sub: string }) {
@@ -20,7 +21,20 @@ function ReportHeader({ title, sub }: { title: string; sub: string }) {
 // ─────────────────────────────────────────────────────────────────────────
 export function NeracaPage() {
   const { saldoAwal, jurnal, identitas, customCOA } = useAppStore()
-  const saldos = useMemo(() => computeSaldos(saldoAwal, jurnal, customCOA), [saldoAwal, jurnal, customCOA])
+  const [bulanFilter, setBulanFilter] = useState(0) // 0 = Semua Periode (perilaku lama)
+  const [tahunFilter, setTahunFilter] = useState(identitas.tahun)
+
+  // Neraca itu snapshot per SATU TANGGAL (kumulatif dari awal), bukan per periode.
+  // Jadi filter bulan di sini artinya: "saldo per AKHIR bulan yang dipilih",
+  // mencakup semua transaksi dari awal sampai akhir bulan itu — bukan cuma
+  // transaksi di bulan itu saja (beda dengan Laba Rugi/Arus Kas).
+  const batasAkhir = bulanFilter === 0 ? identitas.akhir : endOfMonthStr(Number(tahunFilter), bulanFilter)
+  const jurnalUsed = useMemo(
+    () => bulanFilter === 0 ? jurnal : jurnal.filter(j => j.tanggal && j.tanggal <= batasAkhir),
+    [jurnal, bulanFilter, batasAkhir]
+  )
+
+  const saldos = useMemo(() => computeSaldos(saldoAwal, jurnalUsed, customCOA), [saldoAwal, jurnalUsed, customCOA])
   const shu    = useMemo(() => calcSHU(saldos), [saldos])
   const neraca = useMemo(() => calcNeraca(saldos, shu.shuBersih), [saldos, shu])
   const allCOA = useMemo(() => mergeCustomCOA(customCOA), [customCOA])
@@ -59,7 +73,7 @@ export function NeracaPage() {
 
   return (
     <div className="p-6 max-w-2xl" id="print-neraca">
-      <PageHeader title="Laporan Posisi Keuangan (Neraca)" subtitle={`Sesuai SAK EP — Per ${identitas.akhir}`}
+      <PageHeader title="Laporan Posisi Keuangan (Neraca)" subtitle={`Sesuai SAK EP — Per ${formatTanggalIndo(batasAkhir)}`}
         actions={
           <div className="flex gap-2 no-print">
             <PrintButton targetId="print-neraca" title="Laporan Posisi Keuangan (Neraca)" />
@@ -67,13 +81,17 @@ export function NeracaPage() {
           </div>
         }
       />
+      <PeriodeFilterBar jurnal={jurnal} tahunIdentitas={identitas.tahun}
+        bulan={bulanFilter} tahun={tahunFilter}
+        onChangeBulan={setBulanFilter} onChangeTahun={setTahunFilter}
+        labelSemua="Semua Periode (s.d. akhir tahun)" />
       {!seimbang && (
         <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-2 text-sm mb-4">
           ⚠ Neraca tidak seimbang — Selisih Rp {fmt(selisih)}. Periksa saldo awal dan jurnal Anda.
         </div>
       )}
       <div className="card p-5">
-        <ReportHeader title={identitas.nama} sub={`LAPORAN POSISI KEUANGAN · Per ${identitas.akhir}`} />
+        <ReportHeader title={identitas.nama} sub={`LAPORAN POSISI KEUANGAN · Per ${formatTanggalIndo(batasAkhir)}`} />
         <LapHeader label="ASET" />
         <LapHeader label="Aset Lancar" />
         {renderAkunBaris(asetLancar)}
@@ -109,7 +127,20 @@ export function NeracaPage() {
 // ─────────────────────────────────────────────────────────────────────────
 export function LabaRugiPage() {
   const { saldoAwal, jurnal, identitas, customCOA } = useAppStore()
-  const saldos = useMemo(() => computeSaldos(saldoAwal, jurnal, customCOA), [saldoAwal, jurnal, customCOA])
+  const [bulanFilter, setBulanFilter] = useState(0) // 0 = Semua Periode (perilaku lama, identitas.awal s.d. akhir)
+  const [tahunFilter, setTahunFilter] = useState(identitas.tahun)
+
+  // Laba Rugi/SHU itu laporan PERIODE (pendapatan & beban selama rentang waktu
+  // tertentu), beda dengan Neraca yang kumulatif. Jadi filter bulan di sini
+  // artinya: HANYA transaksi tanggal 1 s.d. akhir bulan yang dipilih.
+  const periodeDari   = bulanFilter === 0 ? identitas.awal  : startOfMonthStr(Number(tahunFilter), bulanFilter)
+  const periodeSampai = bulanFilter === 0 ? identitas.akhir : endOfMonthStr(Number(tahunFilter), bulanFilter)
+  const jurnalUsed = useMemo(
+    () => bulanFilter === 0 ? jurnal : jurnal.filter(j => j.tanggal && j.tanggal >= periodeDari && j.tanggal <= periodeSampai),
+    [jurnal, bulanFilter, periodeDari, periodeSampai]
+  )
+
+  const saldos = useMemo(() => computeSaldos(saldoAwal, jurnalUsed, customCOA), [saldoAwal, jurnalUsed, customCOA])
   const shu    = useMemo(() => calcSHU(saldos), [saldos])
   const allCOA = useMemo(() => mergeCustomCOA(customCOA), [customCOA])
   const K = (k: string) => saldos[k] ?? 0
@@ -149,7 +180,7 @@ export function LabaRugiPage() {
 
   return (
     <div className="p-6 max-w-2xl" id="print-labarugi">
-      <PageHeader title="Laporan Hasil Usaha (PHU/SHU)" subtitle={`Periode ${identitas.awal} s.d. ${identitas.akhir}`}
+      <PageHeader title="Laporan Hasil Usaha (PHU/SHU)" subtitle={`Periode ${formatTanggalIndo(periodeDari)} s.d. ${formatTanggalIndo(periodeSampai)}`}
         actions={
           <div className="flex gap-2 no-print">
             <span className={`badge ${shuSetelahPajak >= 0 ? 'badge-green' : 'badge-red'}`}>
@@ -160,8 +191,12 @@ export function LabaRugiPage() {
           </div>
         }
       />
+      <PeriodeFilterBar jurnal={jurnal} tahunIdentitas={identitas.tahun}
+        bulan={bulanFilter} tahun={tahunFilter}
+        onChangeBulan={setBulanFilter} onChangeTahun={setTahunFilter}
+        labelSemua="Semua Periode (1 tahun penuh)" />
       <div className="card p-5">
-        <ReportHeader title={identitas.nama} sub={`LAPORAN HASIL USAHA · Periode ${identitas.awal} s.d. ${identitas.akhir}`} />
+        <ReportHeader title={identitas.nama} sub={`LAPORAN HASIL USAHA · Periode ${formatTanggalIndo(periodeDari)} s.d. ${formatTanggalIndo(periodeSampai)}`} />
 
         {/* PENDAPATAN */}
         <LapHeader label="PENDAPATAN" />
@@ -271,17 +306,46 @@ export function EkuitasPage() {
 // ─────────────────────────────────────────────────────────────────────────
 export function ArusKasPage() {
   const { saldoAwal, jurnal, identitas, customCOA } = useAppStore()
-  // Saldo akhir kas/bank tetap dari saldo (untuk baris "Saldo Kas Akhir")
-  const saldos = useMemo(() => computeSaldos(saldoAwal, jurnal, customCOA), [saldoAwal, jurnal, customCOA])
-  // Arus kas per akun lawan — diturunkan langsung dari baris jurnal yang menyentuh Kas (1.1.1) / Bank (1.1.2)
-  const { masuk, keluar } = useMemo(() => getKasBankMutasi(jurnal), [jurnal])
+  const [bulanFilter, setBulanFilter] = useState(0) // 0 = Semua Periode (perilaku lama, 1 tahun penuh)
+  const [tahunFilter, setTahunFilter] = useState(identitas.tahun)
+
+  const periodeDari   = bulanFilter === 0 ? identitas.awal  : startOfMonthStr(Number(tahunFilter), bulanFilter)
+  const periodeSampai = bulanFilter === 0 ? identitas.akhir : endOfMonthStr(Number(tahunFilter), bulanFilter)
+
+  // 3 potongan jurnal yang dibutuhkan:
+  //  - sebelumPeriode : buat hitung Saldo Kas AWAL periode (kumulatif sebelum tanggal mulai)
+  //  - periode        : buat hitung mutasi masuk/keluar SELAMA periode saja
+  //  - sampaiAkhir    : buat hitung Saldo Kas AKHIR periode (kumulatif s.d. tanggal akhir)
+  const { jurnalSebelum, jurnalPeriode, jurnalSampaiAkhir } = useMemo(() => {
+    if (bulanFilter === 0) {
+      // Perilaku lama: pakai identitas.awal/akhir apa adanya, sebelumPeriode
+      // kosong (saldo awal murni dari input Saldo Awal, bukan dihitung ulang)
+      return { jurnalSebelum: [] as typeof jurnal, jurnalPeriode: jurnal, jurnalSampaiAkhir: jurnal }
+    }
+    return {
+      jurnalSebelum:    jurnal.filter(j => j.tanggal && j.tanggal < periodeDari),
+      jurnalPeriode:    jurnal.filter(j => j.tanggal && j.tanggal >= periodeDari && j.tanggal <= periodeSampai),
+      jurnalSampaiAkhir: jurnal.filter(j => j.tanggal && j.tanggal <= periodeSampai),
+    }
+  }, [jurnal, bulanFilter, periodeDari, periodeSampai])
+
+  // Saldo akhir kas/bank per akhir periode terpilih (bukan selalu akhir tahun lagi)
+  const saldosAkhir = useMemo(() => computeSaldos(saldoAwal, jurnalSampaiAkhir, customCOA), [saldoAwal, jurnalSampaiAkhir, customCOA])
+  // Saldo awal periode: kalau "Semua Periode" pakai input Saldo Awal seperti biasa;
+  // kalau filter bulan aktif, hitung kumulatif dari saldo awal + semua transaksi SEBELUM bulan itu
+  const saldosAwalPeriode = useMemo(
+    () => bulanFilter === 0 ? null : computeSaldos(saldoAwal, jurnalSebelum, customCOA),
+    [saldoAwal, jurnalSebelum, customCOA, bulanFilter]
+  )
+  // Arus kas per akun lawan — diturunkan dari baris jurnal DI PERIODE TERPILIH SAJA
+  const { masuk, keluar } = useMemo(() => getKasBankMutasi(jurnalPeriode), [jurnalPeriode])
   const allCOA = useMemo(() => mergeCustomCOA(customCOA), [customCOA])
   const namaAkun = (kode: string) => allCOA.find(a => a.kode === kode)?.nama ?? kode
   const M  = (k: string) => masuk[k]  ?? 0
   const Kl = (k: string) => keluar[k] ?? 0
   const sumK = (ks: string[]) => ks.reduce((a, k) => a + Kl(k), 0)
-  const K  = (k: string) => saldos[k]   ?? 0
-  const SA = (k: string) => saldoAwal[k] ?? 0
+  const K  = (k: string) => saldosAkhir[k] ?? 0
+  const SA = (k: string) => bulanFilter === 0 ? (saldoAwal[k] ?? 0) : (saldosAwalPeriode?.[k] ?? 0)
 
   // ── AKTIVITAS OPERASI — PENERIMAAN (Kas/Bank didebet, akun lawan dikredit) ──
   const penJasaBunga    = M('4.1.1')
@@ -375,15 +439,19 @@ export function ArusKasPage() {
 
   return (
     <div className="p-6 max-w-2xl" id="print-aruskas">
-      <PageHeader title="Laporan Arus Kas" subtitle={`Metode Langsung (Direct Method) — Per ${identitas.akhir}`}
+      <PageHeader title="Laporan Arus Kas" subtitle={`Metode Langsung (Direct Method) — Periode ${formatTanggalIndo(periodeDari)} s.d. ${formatTanggalIndo(periodeSampai)}`}
         actions={
           <div className="flex gap-2 no-print">
             <PrintButton targetId="print-aruskas" title="Laporan Arus Kas" />
           </div>
         }
       />
+      <PeriodeFilterBar jurnal={jurnal} tahunIdentitas={identitas.tahun}
+        bulan={bulanFilter} tahun={tahunFilter}
+        onChangeBulan={setBulanFilter} onChangeTahun={setTahunFilter}
+        labelSemua="Semua Periode (1 tahun penuh)" />
       <div className="card p-5">
-        <ReportHeader title={identitas.nama} sub={`LAPORAN ARUS KAS (Direct Method) · Per ${identitas.akhir}`} />
+        <ReportHeader title={identitas.nama} sub={`LAPORAN ARUS KAS (Direct Method) · Periode ${formatTanggalIndo(periodeDari)} s.d. ${formatTanggalIndo(periodeSampai)}`} />
 
         {/* ── OPERASI ── */}
         <LapHeader label="ARUS KAS DARI AKTIVITAS OPERASI" />

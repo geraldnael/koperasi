@@ -164,7 +164,41 @@ export function FormGroup({ label, children, required }: FormGroupProps) {
   )
 }
 
-// ── BalanceAlert ──────────────────────────────────────────────────────────
+// ── PeriodeFilterBar ─────────────────────────────────────────────────────
+import { NAMA_BULAN, getTahunTersedia } from '../utils/periode'
+import type { JurnalEntry } from '../types'
+
+interface PeriodeFilterBarProps {
+  jurnal: JurnalEntry[]
+  tahunIdentitas: string
+  bulan: number          // 0 = Semua Periode
+  tahun: string
+  onChangeBulan: (b: number) => void
+  onChangeTahun: (t: string) => void
+  labelSemua?: string    // label untuk opsi "semua", beda arti tiap laporan
+}
+export function PeriodeFilterBar({
+  jurnal, tahunIdentitas, bulan, tahun, onChangeBulan, onChangeTahun,
+  labelSemua = 'Semua Periode',
+}: PeriodeFilterBarProps) {
+  const tahunList = getTahunTersedia(jurnal, tahunIdentitas)
+  return (
+    <div className="card p-4 mb-4 no-print flex items-center gap-3 flex-wrap">
+      <label className="text-xs text-slate-500 font-medium">Tampilkan per bulan:</label>
+      <select className="input text-sm w-44" value={bulan}
+        onChange={e => onChangeBulan(Number(e.target.value))}>
+        <option value={0}>{labelSemua}</option>
+        {NAMA_BULAN.map((nm, i) => <option key={i} value={i + 1}>{nm}</option>)}
+      </select>
+      {bulan > 0 && (
+        <select className="input text-sm w-28" value={tahun}
+          onChange={e => onChangeTahun(e.target.value)}>
+          {tahunList.map(t => <option key={t} value={t}>{t}</option>)}
+        </select>
+      )}
+    </div>
+  )
+}
 interface BalanceAlertProps { debet: number; kredit: number }
 export function BalanceAlert({ debet, kredit }: BalanceAlertProps) {
   const fmt = (n: number) => new Intl.NumberFormat('id-ID').format(Math.round(n))
