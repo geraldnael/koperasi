@@ -231,6 +231,11 @@ function JurnalRow({
   )
 }
 
+function parseNoBuktiNum(nobukti: string): number {
+  const m = nobukti.match(/(\d+)\s*$/)
+  return m ? parseInt(m[1], 10) : -1
+}
+
 // ═══════════════════════════════════════════════════════════════════════
 // Main JurnalPage
 // ═══════════════════════════════════════════════════════════════════════
@@ -266,6 +271,16 @@ export default function JurnalPage() {
     setTanggal(new Date().toISOString().split('T')[0])
   }
 
+  // Dipakai setelah SUKSES simpan: TIDAK mereset tanggal ke hari ini.
+  // Ini penting untuk input transaksi lama secara berurutan (misal input
+  // banyak transaksi Desember 2025 sekaligus) — tanggal yang barusan dipakai
+  // tetap dipertahankan, jadi tidak gampang lupa ganti dan ke-set otomatis
+  // ke tanggal hari ini (bug yang bikin banyak transaksi lama salah tercatat).
+  const resetAfterSave = () => {
+    setEditId(null); setNobukti(''); setKeterangan('')
+    setRows([newRow()]); setAttempted(false)
+  }
+
   const startEdit = (j: JurnalEntry) => {
     setEditId(j.id); setTanggal(j.tanggal); setNobukti(j.nobukti)
     setKeterangan(j.keterangan); setRows(j.rows.map(r => ({ ...r })))
@@ -289,7 +304,7 @@ export default function JurnalPage() {
       } else {
         await addJurnal(entry)
       }
-      reset()
+      resetAfterSave()
     } catch (e: any) {
       // Ada user lain yang barusan pakai No. Bukti yang sama (submit hampir
       // bersamaan). Ambilkan nomor baru otomatis biar user tinggal cek & simpan ulang.
@@ -369,6 +384,11 @@ export default function JurnalPage() {
             <label className="label">Tanggal <span className="text-red-500">*</span></label>
             <input type="date" className="input" value={tanggal}
               onChange={e => setTanggal(e.target.value)} />
+            {editId == null && (
+              <p className="text-[10px] text-slate-400 mt-1">
+                Tanggal dipertahankan dari entri sebelumnya — cek/ganti dulu kalau transaksi ini beda tanggal.
+              </p>
+            )}
           </div>
           <div>
             <label className="label flex items-center justify-between">
@@ -452,7 +472,14 @@ export default function JurnalPage() {
                 </tr>
               </thead>
               <tbody>
-                {[...jurnal].sort((a, b) => a.tanggal.localeCompare(b.tanggal)).map(j => {
+                {[...jurnal].sort((a, b) => {
+                  // Urutkan berdasarkan nomor JU tertinggi dulu — jurnal
+                  // terbaru (nomor tertinggi) selalu tampil paling atas,
+                  // tidak lagi ikut urutan id/tanggal yang bisa kelihatan acak.
+                  const numDiff = parseNoBuktiNum(b.nobukti) - parseNoBuktiNum(a.nobukti)
+                  if (numDiff !== 0) return numDiff
+                  return b.id - a.id
+                }).map(j => {
                   const td       = j.rows.reduce((a, r) => a + (r.debet || 0), 0)
                   const isEdit   = j.id === editId
                   return (
