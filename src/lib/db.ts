@@ -71,19 +71,47 @@ export async function dbAddJurnal(entry: Omit<JurnalEntry, 'id'>): Promise<numbe
     rows:       entry.rows,
     total:      entry.total,
   }).select('id').single()
-  if (error) throw error
+  if (error) {
+    // Postgres code 23505 = unique_violation → nobukti sudah dipakai entri lain
+    // (misal 2 user submit hampir bersamaan). Tandai error ini secara jelas
+    // supaya UI bisa kasih pesan yang mudah dimengerti, bukan error teknis mentah.
+    if (error.code === '23505') {
+      const dupErr = new Error('DUPLICATE_NOBUKTI')
+      dupErr.name = 'DuplicateNoBuktiError'
+      throw dupErr
+    }
+    throw error
+  }
   return data.id
+}
+
+// Minta nomor bukti berikutnya secara ATOMIK dari server (aman dipakai
+// banyak user bersamaan — beda dengan menghitung dari jurnal.length di lokal
+// yang bisa menghasilkan nomor sama kalau dua user submit berbarengan).
+export async function dbGetNextNobukti(): Promise<string> {
+  if (!isOnline()) return `JU-${Date.now().toString().slice(-3)}`
+  const { data, error } = await supabase.rpc('next_nobukti')
+  if (error) throw error
+  return data as string
 }
 
 export async function dbUpdateJurnal(id: number, entry: Omit<JurnalEntry, 'id'>) {
   if (!isOnline()) return
-  await supabase.from('jurnal').update({
+  const { error } = await supabase.from('jurnal').update({
     tanggal:    entry.tanggal,
     nobukti:    entry.nobukti,
     keterangan: entry.keterangan,
     rows:       entry.rows,
     total:      entry.total,
   }).eq('id', id)
+  if (error) {
+    if (error.code === '23505') {
+      const dupErr = new Error('DUPLICATE_NOBUKTI')
+      dupErr.name = 'DuplicateNoBuktiError'
+      throw dupErr
+    }
+    throw error
+  }
 }
 
 export async function dbDeleteJurnal(id: number) {

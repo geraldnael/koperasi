@@ -261,12 +261,18 @@ export const useAppStore = create<AppStore>()(
           set((s) => ({
             jurnal: s.jurnal.map(j => j.id === tmpId ? { ...j, id: realId } : j),
           }))
-        } catch (e) {
+        } catch (e: any) {
           // GAGAL simpan ke server → batalkan entri optimistik supaya tidak
           // "menghilang diam-diam" saat sinkronisasi berikutnya menimpa state lokal
           console.error('Gagal simpan jurnal ke server:', e)
           set((s) => ({ jurnal: s.jurnal.filter(j => j.id !== tmpId) }))
-          alert('GAGAL menyimpan jurnal ke server (cek koneksi internet). Entri ini TIDAK tersimpan — silakan input ulang setelah koneksi normal.')
+          // Lempar ulang errornya supaya halaman Jurnal bisa kasih pesan yang
+          // sesuai (khususnya untuk kasus No. Bukti bentrok/duplikat), alih-alih
+          // ditangani generik di sini saja.
+          if (e?.message !== 'DUPLICATE_NOBUKTI') {
+            alert('GAGAL menyimpan jurnal ke server (cek koneksi internet). Entri ini TIDAK tersimpan — silakan input ulang setelah koneksi normal.')
+          }
+          throw e
         }
       },
       updateJurnal: async (id, entry) => {
@@ -276,10 +282,13 @@ export const useAppStore = create<AppStore>()(
         }))
         try {
           await dbUpdateJurnal(id, entry)
-        } catch (e) {
+        } catch (e: any) {
           console.error('Gagal update jurnal ke server:', e)
           if (prev) set((s) => ({ jurnal: s.jurnal.map(j => j.id === id ? prev : j) }))
-          alert('GAGAL menyimpan perubahan jurnal ke server (cek koneksi internet). Perubahan dibatalkan — silakan coba lagi.')
+          if (e?.message !== 'DUPLICATE_NOBUKTI') {
+            alert('GAGAL menyimpan perubahan jurnal ke server (cek koneksi internet). Perubahan dibatalkan — silakan coba lagi.')
+          }
+          throw e
         }
       },
       deleteJurnal: async (id) => {

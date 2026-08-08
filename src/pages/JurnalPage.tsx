@@ -1,6 +1,7 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import { Plus, Trash2, Save, RotateCcw, PenLine, Pencil, X } from 'lucide-react'
 import { useAppStore } from '../store/useAppStore'
+import { dbGetNextNobukti } from '../lib/db'
 import { getAkunNama, mergeCustomCOA } from '../utils/coa'
 import { fmt } from '../utils/accounting'
 import { PageHeader, BalanceAlert, EmptyState } from '../components/ui'
@@ -246,6 +247,8 @@ export default function JurnalPage() {
   const [nobukti,     setNobukti]     = useState('')
   const [keterangan,  setKeterangan]  = useState('')
   const [rows,        setRows]        = useState<JurnalBaris[]>([newRow()])
+  const [loadingNoBukti, setLoadingNoBukti] = useState(false)
+  const [saving, setSaving] = useState(false)
 
   const totalD   = useMemo(() => rows.reduce((a, r) => a + (r.debet  || 0), 0), [rows])
   const totalK   = useMemo(() => rows.reduce((a, r) => a + (r.kredit || 0), 0), [rows])
@@ -269,7 +272,7 @@ export default function JurnalPage() {
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
-  const save = () => {
+  const save = async () => {
     setAttempted(true)
     if (!tanggal || !nobukti.trim()) { alert('Tanggal dan No. Bukti wajib diisi'); return }
     if (!balanced) { alert('Jurnal tidak seimbang (Debet ≠ Kredit)'); return }
@@ -279,11 +282,42 @@ export default function JurnalPage() {
       return
     }
     const entry = { tanggal, nobukti, keterangan, rows, total: totalD }
-    editId != null ? updateJurnal(editId, entry) : addJurnal(entry)
-    reset()
+    setSaving(true)
+    try {
+      if (editId != null) {
+        await updateJurnal(editId, entry)
+      } else {
+        await addJurnal(entry)
+      }
+      reset()
+    } catch (e: any) {
+      // Ada user lain yang barusan pakai No. Bukti yang sama (submit hampir
+      // bersamaan). Ambilkan nomor baru otomatis biar user tinggal cek & simpan ulang.
+      if (e?.message === 'DUPLICATE_NOBUKTI') {
+        alert(`No. Bukti "${nobukti}" baru saja dipakai user lain untuk transaksi lain (submit bersamaan). Silakan cek ulang, nomor baru sudah disiapkan.`)
+        await fetchAutoNoBukti()
+      } else {
+        alert('Gagal menyimpan jurnal. Cek koneksi internet dan coba lagi.')
+      }
+    } finally {
+      setSaving(false)
+    }
   }
 
-  const autoNoBukti = `JU-${String(jurnal.length + 1).padStart(3, '0')}`
+  // Minta nomor bukti berikutnya ke server (atomik, aman dipakai banyak user
+  // bersamaan) — bukan dihitung dari jurnal.length di lokal seperti sebelumnya.
+  const fetchAutoNoBukti = useCallback(async () => {
+    setLoadingNoBukti(true)
+    try {
+      const next = await dbGetNextNobukti()
+      setNobukti(next)
+    } catch {
+      // Fallback kalau RPC belum ter-setup di database (misal lupa jalankan migration)
+      setNobukti(`JU-${String(jurnal.length + 1).padStart(3, '0')}`)
+    } finally {
+      setLoadingNoBukti(false)
+    }
+  }, [jurnal.length])
 
   const coaOpts = useMemo(() => allCOA.map(a => (
     <option key={a.kode} value={a.kode}>{a.kode} — {a.nama}</option>
@@ -340,8 +374,9 @@ export default function JurnalPage() {
             <label className="label flex items-center justify-between">
               <span>No. Bukti <span className="text-red-500">*</span></span>
               {editId == null && (
-                <button className="text-[10px] text-blue-500 hover:underline"
-                  onClick={() => setNobukti(autoNoBukti)}>auto</button>
+                <button className="text-[10px] text-blue-500 hover:underline disabled:opacity-50"
+                  disabled={loadingNoBukti}
+                  onClick={fetchAutoNoBukti}>{loadingNoBukti ? 'memuat...' : 'auto'}</button>
               )}
             </label>
             <input className="input" value={nobukti}
@@ -386,8 +421,8 @@ export default function JurnalPage() {
         <BalanceAlert debet={totalD} kredit={totalK} />
 
         <div className="flex gap-2 mt-4">
-          <button className="btn btn-primary" onClick={save} disabled={!balanced || !nobukti.trim()}>
-            <Save size={15} /> {editId != null ? 'Update Jurnal' : 'Simpan Jurnal'}
+          <button className="btn btn-primary" onClick={save} disabled={!balanced || !nobukti.trim() || saving}>
+            <Save size={15} /> {saving ? 'Menyimpan...' : editId != null ? 'Update Jurnal' : 'Simpan Jurnal'}
           </button>
           <button className="btn" onClick={reset}>
             <RotateCcw size={15} /> Reset

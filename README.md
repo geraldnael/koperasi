@@ -2,7 +2,7 @@
 
 Aplikasi web laporan keuangan koperasi berbasis **SAK EP** (Standar Akuntansi Keuangan Entitas Privat), sesuai **Peraturan Menteri Koperasi No. 2 Tahun 2024**.
 
-> Dikembangkan untuk mendukung platform **SmartSAK EP** — Dinas Koperasi & Usaha Mikro Kabupaten Kediri.
+> Dikembangkan untuk mendukung platform **SmartSAK EP** — KKP RS. Soeharto Heerdjan Jakarta.
 
 [![Deploy Status](https://github.com/YOUR-USERNAME/sia-koperasi/actions/workflows/deploy.yml/badge.svg)](https://github.com/YOUR-USERNAME/sia-koperasi/actions)
 
