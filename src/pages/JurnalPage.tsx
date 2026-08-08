@@ -1,7 +1,7 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import { Plus, Trash2, Save, RotateCcw, PenLine, Pencil, X } from 'lucide-react'
 import { useAppStore } from '../store/useAppStore'
-import { dbGetNextNobukti } from '../lib/db'
+import { dbPeekNextNobukti } from '../lib/db'
 import { getAkunNama, mergeCustomCOA } from '../utils/coa'
 import { fmt } from '../utils/accounting'
 import { PageHeader, BalanceAlert, EmptyState } from '../components/ui'
@@ -250,6 +250,7 @@ export default function JurnalPage() {
   const today = new Date().toISOString().split('T')[0]
   const [tanggal,     setTanggal]     = useState(today)
   const [nobukti,     setNobukti]     = useState('')
+  const [autoMode,    setAutoMode]    = useState(false)
   const [keterangan,  setKeterangan]  = useState('')
   const [rows,        setRows]        = useState<JurnalBaris[]>([newRow()])
   const [loadingNoBukti, setLoadingNoBukti] = useState(false)
@@ -266,7 +267,7 @@ export default function JurnalPage() {
   const removeRow = (id: string) => setRows(rs => rs.length > 1 ? rs.filter(r => r.id !== id) : rs)
 
   const reset = () => {
-    setEditId(null); setNobukti(''); setKeterangan('')
+    setEditId(null); setNobukti(''); setAutoMode(false); setKeterangan('')
     setRows([newRow()]); setAttempted(false)
     setTanggal(new Date().toISOString().split('T')[0])
   }
@@ -277,12 +278,12 @@ export default function JurnalPage() {
   // tetap dipertahankan, jadi tidak gampang lupa ganti dan ke-set otomatis
   // ke tanggal hari ini (bug yang bikin banyak transaksi lama salah tercatat).
   const resetAfterSave = () => {
-    setEditId(null); setNobukti(''); setKeterangan('')
+    setEditId(null); setNobukti(''); setAutoMode(false); setKeterangan('')
     setRows([newRow()]); setAttempted(false)
   }
 
   const startEdit = (j: JurnalEntry) => {
-    setEditId(j.id); setTanggal(j.tanggal); setNobukti(j.nobukti)
+    setEditId(j.id); setTanggal(j.tanggal); setNobukti(j.nobukti); setAutoMode(false)
     setKeterangan(j.keterangan); setRows(j.rows.map(r => ({ ...r })))
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
@@ -302,12 +303,17 @@ export default function JurnalPage() {
       if (editId != null) {
         await updateJurnal(editId, entry)
       } else {
-        await addJurnal(entry)
+        // isAutoMode: nomor baru benar-benar DIKUNCI di server sekarang,
+        // bukan sebelumnya saat tombol "auto" diklik — nilai `nobukti` di
+        // sini cuma preview, hasil final bisa sedikit beda kalau user lain
+        // sempat menyimpan lebih dulu di antara waktu preview & simpan ini.
+        await addJurnal(entry, autoMode)
       }
       resetAfterSave()
     } catch (e: any) {
       // Ada user lain yang barusan pakai No. Bukti yang sama (submit hampir
-      // bersamaan). Ambilkan nomor baru otomatis biar user tinggal cek & simpan ulang.
+      // bersamaan, biasanya nomor manual). Ambilkan nomor baru otomatis
+      // biar user tinggal cek & simpan ulang.
       if (e?.message === 'DUPLICATE_NOBUKTI') {
         alert(`No. Bukti "${nobukti}" baru saja dipakai user lain untuk transaksi lain (submit bersamaan). Silakan cek ulang, nomor baru sudah disiapkan.`)
         await fetchAutoNoBukti()
@@ -319,16 +325,19 @@ export default function JurnalPage() {
     }
   }
 
-  // Minta nomor bukti berikutnya ke server (atomik, aman dipakai banyak user
-  // bersamaan) — bukan dihitung dari jurnal.length di lokal seperti sebelumnya.
+  // Ambil PREVIEW nomor bukti berikutnya untuk ditampilkan di form. Ini
+  // TIDAK mengunci/memajukan nomor apapun di database — nomor final baru
+  // benar-benar dikunci nanti saat user klik Simpan (lihat komentar di save()).
   const fetchAutoNoBukti = useCallback(async () => {
     setLoadingNoBukti(true)
     try {
-      const next = await dbGetNextNobukti()
+      const next = await dbPeekNextNobukti()
       setNobukti(next)
+      setAutoMode(true)
     } catch {
       // Fallback kalau RPC belum ter-setup di database (misal lupa jalankan migration)
       setNobukti(`JU-${String(jurnal.length + 1).padStart(3, '0')}`)
+      setAutoMode(false)
     } finally {
       setLoadingNoBukti(false)
     }
@@ -400,7 +409,12 @@ export default function JurnalPage() {
               )}
             </label>
             <input className="input" value={nobukti}
-              onChange={e => setNobukti(e.target.value)} placeholder="JU-001" />
+              onChange={e => { setNobukti(e.target.value); setAutoMode(false) }} placeholder="JU-001" />
+            {autoMode && (
+              <p className="text-[10px] text-slate-400 mt-1">
+                Preview — nomor final dikunci saat disimpan, bisa sedikit beda kalau ada user lain menyimpan lebih dulu.
+              </p>
+            )}
           </div>
           <div className="col-span-2">
             <label className="label">Keterangan Transaksi</label>

@@ -82,7 +82,7 @@ interface AppStore {
   setCustomCOA: (akun: import('../types').Akun[]) => void
   setSaldoAwal: (saldo: Record<string, number>) => void
   updateSaldoAkun: (kode: string, val: number) => void
-  addJurnal: (entry: Omit<JurnalEntry, 'id'>) => Promise<void>
+  addJurnal: (entry: Omit<JurnalEntry, 'id'>, isAutoNoBukti?: boolean) => Promise<void>
   updateJurnal: (id: number, entry: Omit<JurnalEntry, 'id'>) => Promise<void>
   deleteJurnal: (id: number) => Promise<void>
   updateSaldoSimpanan: (anggotaId: number, data: Partial<Omit<SaldoSimpanan, 'anggotaId'>>) => void
@@ -248,18 +248,21 @@ export const useAppStore = create<AppStore>()(
       },
 
       // ── Jurnal ────────────────────────────────────────────────────────
-      addJurnal: async (entry) => {
-        // Optimistic update dulu
+      addJurnal: async (entry, isAutoNoBukti) => {
+        // Optimistic update dulu — nobukti yang ditampilkan sementara masih
+        // berupa preview (belum tentu final kalau mode auto, karena baru
+        // benar-benar dikunci oleh server saat insert ini berhasil).
         const tmpId = get().nextJurnalId
         set((s) => ({
           jurnal: [{ ...entry, id: tmpId }, ...s.jurnal],
           nextJurnalId: s.nextJurnalId + 1,
         }))
         try {
-          // Simpan ke Supabase, update id dengan id asli
-          const realId = await dbAddJurnal(entry)
+          // Simpan ke Supabase. Kalau mode auto, nobukti final DIKUNCI di sini
+          // (bukan sebelumnya saat klik tombol "auto") lewat trigger database.
+          const saved = await dbAddJurnal(entry, isAutoNoBukti)
           set((s) => ({
-            jurnal: s.jurnal.map(j => j.id === tmpId ? { ...j, id: realId } : j),
+            jurnal: s.jurnal.map(j => j.id === tmpId ? { ...j, id: saved.id, nobukti: saved.nobukti } : j),
           }))
         } catch (e: any) {
           // GAGAL simpan ke server → batalkan entri optimistik supaya tidak

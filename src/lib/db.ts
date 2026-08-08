@@ -62,15 +62,18 @@ export async function dbGetJurnal(): Promise<JurnalEntry[]> {
   }))
 }
 
-export async function dbAddJurnal(entry: Omit<JurnalEntry, 'id'>): Promise<number> {
-  if (!isOnline()) return Date.now()
+export async function dbAddJurnal(entry: Omit<JurnalEntry, 'id'>, isAutoNoBukti?: boolean): Promise<{ id: number; nobukti: string }> {
+  if (!isOnline()) return { id: Date.now(), nobukti: entry.nobukti }
   const { data, error } = await supabase.from('jurnal').insert({
     tanggal:    entry.tanggal,
-    nobukti:    entry.nobukti,
+    // Mode auto → kirim NULL, biar trigger di database yang mengunci nomor
+    // final secara atomik SAAT INSERT ini benar-benar terjadi (bukan
+    // sebelumnya saat user baru klik tombol "auto" di form).
+    nobukti:    isAutoNoBukti ? null : entry.nobukti,
     keterangan: entry.keterangan,
     rows:       entry.rows,
     total:      entry.total,
-  }).select('id').single()
+  }).select('id, nobukti').single()
   if (error) {
     // Postgres code 23505 = unique_violation → nobukti sudah dipakai entri lain
     // (misal 2 user submit hampir bersamaan). Tandai error ini secara jelas
@@ -82,15 +85,17 @@ export async function dbAddJurnal(entry: Omit<JurnalEntry, 'id'>): Promise<numbe
     }
     throw error
   }
-  return data.id
+  // nobukti final dikembalikan dari server (bisa beda dari preview kalau
+  // mode auto, karena baru dikunci betulan sekarang oleh trigger)
+  return { id: data.id, nobukti: data.nobukti }
 }
 
-// Minta nomor bukti berikutnya secara ATOMIK dari server (aman dipakai
-// banyak user bersamaan — beda dengan menghitung dari jurnal.length di lokal
-// yang bisa menghasilkan nomor sama kalau dua user submit berbarengan).
-export async function dbGetNextNobukti(): Promise<string> {
+// Preview nomor bukti berikutnya — HANYA untuk ditampilkan di form, TIDAK
+// memajukan sequence di database. Nomor final baru benar-benar dikunci saat
+// entri disimpan (lihat dbAddJurnal + trigger assign_nobukti_on_insert).
+export async function dbPeekNextNobukti(): Promise<string> {
   if (!isOnline()) return `JU-${Date.now().toString().slice(-3)}`
-  const { data, error } = await supabase.rpc('next_nobukti')
+  const { data, error } = await supabase.rpc('peek_next_nobukti')
   if (error) throw error
   return data as string
 }
