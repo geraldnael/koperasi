@@ -33,3 +33,19 @@ export function getTahunTersedia(jurnal: JurnalEntry[], tahunIdentitas: string):
   if (tahunIdentitas) set.add(tahunIdentitas)
   return Array.from(set).sort((a, b) => b.localeCompare(a))
 }
+
+/**
+ * Tahun default yang PALING MASUK AKAL untuk filter: tahun terbaru yang
+ * BENERAN ADA di data jurnal (bukan asal ambil dari menu Identitas — kalau
+ * field tahun di Identitas tidak sinkron dengan tanggal transaksi asli,
+ * filter bulan bisa salah tahun dan hasilnya kelihatan kosong padahal
+ * datanya ada).
+ */
+export function getTahunTerbaru(jurnal: JurnalEntry[], tahunIdentitas: string): string {
+  const jurnalYears = new Set<string>()
+  jurnal.forEach(j => { if (j.tanggal && j.tanggal.length >= 4) jurnalYears.add(j.tanggal.slice(0, 4)) })
+  if (jurnalYears.size > 0) {
+    return Array.from(jurnalYears).sort((a, b) => b.localeCompare(a))[0]
+  }
+  return tahunIdentitas
+}

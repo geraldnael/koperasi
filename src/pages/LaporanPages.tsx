@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { useAppStore } from '../store/useAppStore'
 import { computeSaldos, calcNeraca, calcSHU, fmt, getKasBankMutasi } from '../utils/accounting'
 import { mergeCustomCOA,} from '../utils/coa'
-import { startOfMonthStr, endOfMonthStr, formatTanggalIndo } from '../utils/periode'
+import { startOfMonthStr, endOfMonthStr, formatTanggalIndo, getTahunTerbaru } from '../utils/periode'
 import type { Akun } from '../types'
 import { PageHeader, PrintButton, DownloadButton, LapRow, LapHeader, PeriodeFilterBar } from '../components/ui'
 import { exportNeraca, exportSHU } from '../utils/exportExcel'
@@ -22,7 +22,7 @@ function ReportHeader({ title, sub }: { title: string; sub: string }) {
 export function NeracaPage() {
   const { saldoAwal, jurnal, identitas, customCOA } = useAppStore()
   const [bulanFilter, setBulanFilter] = useState(0) // 0 = Semua Periode (perilaku lama)
-  const [tahunFilter, setTahunFilter] = useState(identitas.tahun)
+  const [tahunFilter, setTahunFilter] = useState(() => getTahunTerbaru(jurnal, identitas.tahun))
 
   // Neraca itu snapshot per SATU TANGGAL (kumulatif dari awal), bukan per periode.
   // Jadi filter bulan di sini artinya: "saldo per AKHIR bulan yang dipilih",
@@ -128,7 +128,7 @@ export function NeracaPage() {
 export function LabaRugiPage() {
   const { saldoAwal, jurnal, identitas, customCOA } = useAppStore()
   const [bulanFilter, setBulanFilter] = useState(0) // 0 = Semua Periode (perilaku lama, identitas.awal s.d. akhir)
-  const [tahunFilter, setTahunFilter] = useState(identitas.tahun)
+  const [tahunFilter, setTahunFilter] = useState(() => getTahunTerbaru(jurnal, identitas.tahun))
 
   // Laba Rugi/SHU itu laporan PERIODE (pendapatan & beban selama rentang waktu
   // tertentu), beda dengan Neraca yang kumulatif. Jadi filter bulan di sini
@@ -307,7 +307,7 @@ export function EkuitasPage() {
 export function ArusKasPage() {
   const { saldoAwal, jurnal, identitas, customCOA } = useAppStore()
   const [bulanFilter, setBulanFilter] = useState(0) // 0 = Semua Periode (perilaku lama, 1 tahun penuh)
-  const [tahunFilter, setTahunFilter] = useState(identitas.tahun)
+  const [tahunFilter, setTahunFilter] = useState(() => getTahunTerbaru(jurnal, identitas.tahun))
 
   const periodeDari   = bulanFilter === 0 ? identitas.awal  : startOfMonthStr(Number(tahunFilter), bulanFilter)
   const periodeSampai = bulanFilter === 0 ? identitas.akhir : endOfMonthStr(Number(tahunFilter), bulanFilter)
