@@ -118,6 +118,8 @@ function JurnalRow({
   attempted: boolean
 }) {
   const tag = rowTag(row)
+  const namaTidakValid = attempted && !!row.ket.trim() &&
+    !anggotaNama.some(n => n.toLowerCase() === row.ket.trim().toLowerCase())
 
   // Hitung sisa kredit yang dibutuhkan agar jurnal balance
   const totalDebet  = allRows.reduce((s, r) => s + (r.debet  || 0), 0)
@@ -169,9 +171,15 @@ function JurnalRow({
           suggestions={anggotaNama}
           placeholder="Nama anggota..."
           className={`input text-xs w-full
-            ${tag === 'simpanan' ? 'border-emerald-300 focus:border-emerald-500' :
+            ${namaTidakValid ? 'border-red-400 bg-red-50 focus:border-red-500' :
+              tag === 'simpanan' ? 'border-emerald-300 focus:border-emerald-500' :
               tag === 'piutang'  ? 'border-blue-300   focus:border-blue-500'    : ''}`}
         />
+        {namaTidakValid && (
+          <p className="text-[10px] text-red-500 mt-0.5">
+            Nama tidak ada di daftar Anggota — pilih dari saran, atau kosongkan.
+          </p>
+        )}
       </div>
 
       {/* Akun Debet */}
@@ -295,6 +303,16 @@ export default function JurnalPage() {
     const rowKosong = rows.findIndex(r => !r.kode_d || !r.kode_k)
     if (rowKosong !== -1) {
       alert(`Baris ${rowKosong + 1}: Akun Debet dan Akun Kredit wajib diisi`)
+      return
+    }
+    // Nama anggota kalau diisi HARUS cocok dengan data di menu Anggota —
+    // cegah salah ketik/nama fiktif ikut tercatat sebagai piutang/simpanan
+    // anggota yang sebenarnya tidak ada di database.
+    const rowNamaSalah = rows.findIndex(r =>
+      r.ket.trim() && !anggotaNama.some(n => n.toLowerCase() === r.ket.trim().toLowerCase())
+    )
+    if (rowNamaSalah !== -1) {
+      alert(`Baris ${rowNamaSalah + 1}: Nama anggota "${rows[rowNamaSalah].ket}" tidak ditemukan di daftar Anggota.\n\nPilih nama dari saran yang muncul saat mengetik, atau kosongkan kolom itu kalau transaksi ini bukan untuk anggota tertentu. Kalau anggota ini memang baru, tambahkan dulu lewat menu Anggota.`)
       return
     }
     const entry = { tanggal, nobukti, keterangan, rows, total: totalD }
