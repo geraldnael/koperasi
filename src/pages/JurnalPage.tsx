@@ -293,7 +293,11 @@ export default function JurnalPage() {
   const startEdit = (j: JurnalEntry) => {
     setEditId(j.id); setTanggal(j.tanggal); setNobukti(j.nobukti); setAutoMode(false)
     setKeterangan(j.keterangan); setRows(j.rows.map(r => ({ ...r })))
-    window.scrollTo({ top: 0, behavior: 'smooth' })
+    // Scroll ke atas FORM edit. PENTING: bukan window.scrollTo(), karena layout
+    // aplikasi ini pakai sidebar fixed — yang benar-benar bisa di-scroll itu
+    // <main id="main-content"> di App.tsx, bukan window/body-nya. window.scrollTo()
+    // tidak akan berefek apapun di layout seperti ini.
+    document.getElementById('main-content')?.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
   const save = async () => {
