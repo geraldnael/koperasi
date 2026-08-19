@@ -46,13 +46,29 @@ export async function dbUpdateSaldoAkun(kode: string, nilai: number) {
 // ── JURNAL ────────────────────────────────────────────────────────────────
 export async function dbGetJurnal(): Promise<JurnalEntry[]> {
   if (!isOnline()) return []
-  const { data } = await supabase
-    .from('jurnal')
-    .select('*')
-    .order('tanggal', { ascending: false })
-    .order('id', { ascending: false })
-  if (!data) return []
-  return data.map(r => ({
+  // Ambil SEMUA baris dengan cara "paging" (500 per halaman), bukan sekali
+  // fetch — Supabase API punya batas maksimal jumlah baris per request
+  // (default project ini 1000), jadi kalau data jurnal sudah lebih banyak
+  // dari itu, entri yang lama akan kepotong/tidak ke-load kalau cuma fetch
+  // sekali. Dengan loop ini, berapapun jumlah datanya nanti (ribuan
+  // sekalipun) akan tetap ke-fetch semua secara bertahap.
+  const pageSize = 500 // sengaja di bawah limit manapun yang wajar
+  let from = 0
+  let all: any[] = []
+  while (true) {
+    const { data, error } = await supabase
+      .from('jurnal')
+      .select('*')
+      .order('tanggal', { ascending: false })
+      .order('id', { ascending: false })
+      .range(from, from + pageSize - 1)
+    if (error) { console.error(`Gagal fetch jurnal (halaman mulai ${from}):`, error); break }
+    if (!data || data.length === 0) break
+    all = all.concat(data)
+    from += pageSize
+    if (data.length < pageSize) break // ini halaman terakhir, berhenti
+  }
+  return all.map(r => ({
     id:         r.id,
     tanggal:    r.tanggal,
     nobukti:    r.nobukti,
