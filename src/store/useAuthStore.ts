@@ -85,14 +85,29 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   loadEditRequests: async () => {
-    const { data, error } = await supabase
+    const { data: reqs, error } = await supabase
       .from('edit_requests')
-      .select('*, profiles!edit_requests_requested_by_fkey(nama)')
+      .select('*')
       .order('requested_at', { ascending: false })
     if (error) { console.error('Gagal load edit_requests:', error); return }
-    const mapped: EditRequest[] = (data ?? []).map((r: any) => ({
+
+    // Ambil nama requester secara TERPISAH (bukan lewat join/embed), karena
+    // tidak ada foreign key langsung dari edit_requests ke profiles —
+    // yang ada cuma edit_requests→auth.users dan profiles→auth.users
+    // secara terpisah. Embed query PostgREST sebelumnya gagal diam-diam
+    // karena relasi itu tidak ada, bikin seluruh fitur ini kelihatan mati.
+    const userIds = Array.from(new Set((reqs ?? []).map((r: any) => r.requested_by)))
+    let namaMap: Record<string, string> = {}
+    if (userIds.length > 0) {
+      const { data: profs, error: profErr } = await supabase
+        .from('profiles').select('id, nama').in('id', userIds)
+      if (profErr) console.error('Gagal load nama requester:', profErr)
+      namaMap = Object.fromEntries((profs ?? []).map((p: any) => [p.id, p.nama]))
+    }
+
+    const mapped: EditRequest[] = (reqs ?? []).map((r: any) => ({
       ...r,
-      requested_by_nama: r.profiles?.nama,
+      requested_by_nama: namaMap[r.requested_by] ?? '(user tidak dikenal)',
     }))
     set({ editRequests: mapped })
   },
