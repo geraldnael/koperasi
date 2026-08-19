@@ -1,6 +1,7 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
-import { Plus, Trash2, Save, RotateCcw, PenLine, Pencil, X } from 'lucide-react'
+import { Plus, Trash2, Save, RotateCcw, PenLine, Pencil, X, ShieldQuestion, Clock, Check, XCircle } from 'lucide-react'
 import { useAppStore } from '../store/useAppStore'
+import { useAuthStore } from '../store/useAuthStore'
 import { dbPeekNextNobukti } from '../lib/db'
 import { getAkunNama, mergeCustomCOA } from '../utils/coa'
 import { fmt } from '../utils/accounting'
@@ -249,6 +250,13 @@ function parseNoBuktiNum(nobukti: string): number {
 // ═══════════════════════════════════════════════════════════════════════
 export default function JurnalPage() {
   const { jurnal, addJurnal, updateJurnal, deleteJurnal, anggota, identitas, customCOA } = useAppStore()
+  const { profile, editRequests, requestEdit, approveEditRequest, rejectEditRequest,
+          hasApprovedEdit, hasPendingEdit } = useAuthStore()
+  const role = profile?.role
+  const isBendahara = role === 'bendahara'
+  const isAdmin     = role === 'admin'
+  const [showApprovalPanel, setShowApprovalPanel] = useState(false)
+  const pendingRequests = editRequests.filter(r => r.status === 'pending')
   const allCOA = useMemo(() => mergeCustomCOA(customCOA), [customCOA])
 
   const anggotaNama = useMemo(() => anggota.map(a => a.nama), [anggota])
@@ -376,6 +384,18 @@ export default function JurnalPage() {
         subtitle="Pencatatan transaksi double-entry — debet = kredit"
         actions={
           <div className="flex gap-2 no-print">
+            {isBendahara && (
+              <button
+                className={`btn relative ${pendingRequests.length > 0 ? 'bg-amber-500 text-white border-amber-500 hover:bg-amber-600' : ''}`}
+                onClick={() => setShowApprovalPanel(v => !v)}>
+                <ShieldQuestion size={15} /> Permintaan Edit
+                {pendingRequests.length > 0 && (
+                  <span className="ml-1 bg-white text-amber-600 rounded-full px-1.5 text-[10px] font-bold">
+                    {pendingRequests.length}
+                  </span>
+                )}
+              </button>
+            )}
             <button className="btn" onClick={() => printElement('print-jurnal', 'Jurnal Umum')}>
               🖨️ Cetak
             </button>
@@ -386,6 +406,43 @@ export default function JurnalPage() {
           </div>
         }
       />
+
+      {/* Panel approval — cuma Bendahara yang lihat */}
+      {isBendahara && showApprovalPanel && (
+        <div className="card p-4 mb-4 no-print">
+          <p className="text-xs font-semibold text-slate-500 mb-2">Permintaan Izin Edit dari Admin</p>
+          {pendingRequests.length === 0 ? (
+            <p className="text-xs text-slate-400">Tidak ada permintaan yang menunggu.</p>
+          ) : (
+            <div className="space-y-2">
+              {pendingRequests.map(req => {
+                const j = jurnal.find(x => x.id === req.jurnal_id)
+                return (
+                  <div key={req.id} className="flex items-center justify-between bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs">
+                    <div>
+                      <span className="font-bold">{j?.nobukti ?? `#${req.jurnal_id}`}</span>
+                      <span className="text-slate-500"> — {j?.keterangan || 'transaksi'}</span>
+                      <span className="block text-slate-400 mt-0.5">
+                        diminta oleh {req.requested_by_nama ?? 'user'} · {new Date(req.requested_at).toLocaleString('id-ID')}
+                      </span>
+                    </div>
+                    <div className="flex gap-1 shrink-0">
+                      <button className="btn btn-sm bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-700"
+                        onClick={() => approveEditRequest(req.id)}>
+                        <Check size={12} /> Setujui
+                      </button>
+                      <button className="btn btn-sm text-red-600 border-red-200 hover:bg-red-50"
+                        onClick={() => rejectEditRequest(req.id)}>
+                        <XCircle size={12} /> Tolak
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="bg-blue-50 border border-blue-200 text-blue-700 text-xs rounded-lg px-4 py-2 mb-4 leading-relaxed">
         💡 <strong>Nama Anggota:</strong> ketik sebagian nama → pilih dari dropdown.
@@ -529,17 +586,44 @@ export default function JurnalPage() {
                         <td className="td-num text-blue-700 font-bold">{fmt(td)}</td>
                         <td className="td text-center">
                           <div className="flex gap-1 justify-center">
-                            <button
-                              className="btn btn-sm p-1.5 text-amber-600 border-amber-200 hover:bg-amber-50"
-                              onClick={() => startEdit(j)} title="Edit jurnal">
-                              <Pencil size={13} />
-                            </button>
-                            <button
-                              className="btn btn-danger btn-sm p-1.5"
-                              onClick={() => { if (confirm('Hapus jurnal ini?')) deleteJurnal(j.id) }}
-                              title="Hapus jurnal">
-                              <Trash2 size={13} />
-                            </button>
+                            {/* Tombol Edit: perilaku beda per role */}
+                            {isBendahara ? (
+                              <button
+                                className="btn btn-sm p-1.5 text-amber-600 border-amber-200 hover:bg-amber-50"
+                                onClick={() => startEdit(j)} title="Edit jurnal">
+                                <Pencil size={13} />
+                              </button>
+                            ) : isAdmin && hasApprovedEdit(j.id) ? (
+                              <button
+                                className="btn btn-sm p-1.5 text-emerald-600 border-emerald-300 hover:bg-emerald-50"
+                                onClick={() => startEdit(j)} title="Izin edit disetujui — klik untuk edit">
+                                <Pencil size={13} />
+                              </button>
+                            ) : isAdmin && hasPendingEdit(j.id) ? (
+                              <button className="btn btn-sm p-1.5 text-slate-400 cursor-not-allowed" disabled
+                                title="Menunggu persetujuan Bendahara">
+                                <Clock size={13} />
+                              </button>
+                            ) : isAdmin ? (
+                              <button
+                                className="btn btn-sm p-1.5 text-blue-600 border-blue-200 hover:bg-blue-50"
+                                onClick={async () => {
+                                  const res = await requestEdit(j.id)
+                                  if (!res.ok) alert(res.message)
+                                }}
+                                title="Minta izin edit ke Bendahara">
+                                <ShieldQuestion size={13} />
+                              </button>
+                            ) : null}
+                            {/* Hapus: cuma Bendahara */}
+                            {isBendahara && (
+                              <button
+                                className="btn btn-danger btn-sm p-1.5"
+                                onClick={() => { if (confirm('Hapus jurnal ini?')) deleteJurnal(j.id) }}
+                                title="Hapus jurnal">
+                                <Trash2 size={13} />
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>

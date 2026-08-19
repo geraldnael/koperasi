@@ -1,9 +1,10 @@
 import {
   LayoutDashboard, Building2, ListTree, Wallet, Users,
   PenLine, BookOpen, Scale, ChartPie, ChartBar, Banknote,
-  Store, CreditCard, PieChart, ChevronRight, GitCompare, Lock,
+  Store, CreditCard, PieChart, ChevronRight, GitCompare, Lock, LogOut,
 } from 'lucide-react'
 import { useAppStore } from '../store/useAppStore'
+import { useAuthStore, type UserRole } from '../store/useAuthStore'
 
 export type PageId =
   | 'dashboard' | 'identitas' | 'coa' | 'anggota'
@@ -64,8 +65,33 @@ const sections = [
   },
 ]
 
+// Menu yang boleh dilihat Ketua Umum — read-only, cuma laporan.
+// admin & bendahara: lihat SEMUA menu (pembatasannya ada di sisi AKSI
+// simpan/edit, bukan di sisi menu mana yang kelihatan).
+const KETUA_ALLOWED: PageId[] = [
+  'buku_besar', 'neraca', 'neraca_komparatif', 'laba_rugi', 'ekuitas', 'arus_kas', 'shu',
+]
+
+export function isPageAllowed(role: UserRole | undefined, pageId: PageId): boolean {
+  if (role === 'ketua') return KETUA_ALLOWED.includes(pageId)
+  return true // admin & bendahara: semua menu kelihatan
+}
+
+const ROLE_LABEL: Record<UserRole, string> = {
+  admin: 'Admin', bendahara: 'Bendahara', ketua: 'Ketua Umum',
+}
+const ROLE_BADGE: Record<UserRole, string> = {
+  admin: 'badge-blue', bendahara: 'badge-green', ketua: 'badge-slate',
+}
+
 export default function Sidebar({ active, onChange }: Props) {
   const { identitas, jurnal } = useAppStore()
+  const { profile, signOut } = useAuthStore()
+  const role = profile?.role
+
+  const visibleSections = sections
+    .map(sec => ({ ...sec, items: sec.items.filter(item => isPageAllowed(role, item.id)) }))
+    .filter(sec => sec.items.length > 0)
 
   return (
     <aside className="w-56 min-w-[224px] bg-white border-r border-slate-200 flex flex-col overflow-y-auto">
@@ -91,7 +117,7 @@ export default function Sidebar({ active, onChange }: Props) {
 
       {/* nav */}
       <nav className="flex-1 py-2 px-2">
-        {sections.map(sec => (
+        {visibleSections.map(sec => (
           <div key={sec.label} className="mb-1">
             <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider px-2 py-1.5">
               {sec.label}
@@ -115,8 +141,20 @@ export default function Sidebar({ active, onChange }: Props) {
         ))}
       </nav>
 
-      <div className="px-3 py-2 border-t border-slate-100 text-[10px] text-slate-400 text-center">
-        KKP RS. Soeharto Heerdjan Jakarta
+      <div className="px-3 py-2.5 border-t border-slate-100">
+        <div className="flex items-center justify-between mb-1.5">
+          <div className="min-w-0">
+            <p className="text-xs font-medium text-slate-700 truncate">{profile?.nama ?? '-'}</p>
+            {role && <span className={`badge ${ROLE_BADGE[role]} text-[9px] mt-0.5`}>{ROLE_LABEL[role]}</span>}
+          </div>
+          <button onClick={signOut} title="Keluar"
+            className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-red-500 shrink-0">
+            <LogOut size={14} />
+          </button>
+        </div>
+        <p className="text-[10px] text-slate-400 text-center">
+          KKP RS. Soeharto Heerdjan Jakarta
+        </p>
       </div>
     </aside>
   )

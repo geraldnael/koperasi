@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import Sidebar, { type PageId } from './components/Sidebar'
+import Sidebar, { type PageId, isPageAllowed } from './components/Sidebar'
+import LoginPage from './pages/LoginPage'
 import Dashboard from './pages/Dashboard'
 import IdentitasPage from './pages/IdentitasPage'
 import COAPage from './pages/COAPage'
@@ -11,6 +12,7 @@ import { NeracaPage, LabaRugiPage, EkuitasPage, ArusKasPage, NeracaKomparatifPag
 import { SHUPage, SimpananPage, PiutangSPPage, TokoPage } from './pages/BukuPembantuPages'
 import TutupBukuPage from './pages/TutupBukuPage'
 import { useAppStore } from './store/useAppStore'
+import { useAuthStore } from './store/useAuthStore'
 import { supabase, isOnline } from './lib/supabase'
 import {
   dbGetIdentitas, dbGetSaldoAwal, dbGetJurnal,
@@ -27,13 +29,31 @@ function useDebounce(fn: () => void, delay: number) {
 }
 
 export default function App() {
+  const { session, profile, authLoading, init: initAuth, loadEditRequests } = useAuthStore()
   const [page, setPage] = useState<PageId>('dashboard')
   const { syncFromSupabase, syncArsipTahun, syncStatus } = useAppStore()
 
+  // ── Init auth (cek sesi tersimpan + dengarkan perubahan login) ─────────
+  useEffect(() => { initAuth() }, [])
+
+  // ── Setelah login berhasil & role diketahui, arahkan ke halaman yang
+  //    memang boleh diakses role itu (Ketua tidak punya akses ke Dashboard)
+  useEffect(() => {
+    if (profile && !isPageAllowed(profile.role, page)) {
+      setPage(profile.role === 'ketua' ? 'buku_besar' : 'dashboard')
+    }
+  }, [profile])
+
+  // Ganti halaman TAPI selalu dicek dulu boleh/tidak untuk role ini —
+  // lapisan pertahanan kedua di sisi UI, selain RLS di database.
+  const changePage = (p: PageId) => {
+    if (isPageAllowed(profile?.role, p)) setPage(p)
+  }
+
   // ── Initial load ────────────────────────────────────────────────────────
   useEffect(() => {
-    if (isOnline()) { syncFromSupabase(); syncArsipTahun() }
-  }, [])
+    if (isOnline() && session) { syncFromSupabase(); syncArsipTahun(); loadEditRequests() }
+  }, [session])
 
   // ── Granular realtime handlers ──────────────────────────────────────────
   // Setiap tabel punya handler sendiri yang hanya fetch tabel itu saja,
@@ -79,7 +99,7 @@ export default function App() {
 
   // ── Realtime subscription ────────────────────────────────────────────────
   useEffect(() => {
-    if (!isOnline()) return
+    if (!isOnline() || !session) return
 
     const channel = supabase
       .channel('db-realtime', {
@@ -125,7 +145,7 @@ export default function App() {
       window.removeEventListener('online', handleOnline)
       document.removeEventListener('visibilitychange', handleVisible)
     }
-  }, [])
+  }, [session])
 
   // ── Pages (keep all mounted untuk preserve state) ────────────────────────
   const pages: [PageId, React.ReactNode][] = [
@@ -155,10 +175,20 @@ export default function App() {
     : syncStatus === 'error'   ? { text: '✗ Gagal sync',    cls: 'bg-red-100 text-red-700' }
     : { text: '○ Siap', cls: 'bg-slate-100 text-slate-500' }
 
+  // ── Gerbang auth ──────────────────────────────────────────────────────
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 text-slate-400 text-sm">
+        Memuat...
+      </div>
+    )
+  }
+  if (!session) return <LoginPage />
+
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50">
       <div id="sidebar" className="no-print">
-        <Sidebar active={page} onChange={setPage} />
+        <Sidebar active={page} onChange={changePage} />
       </div>
       <main id="main-content" className="flex-1 min-w-0 overflow-y-auto relative">
 
@@ -167,12 +197,14 @@ export default function App() {
           {statusLabel.text}
         </div>
 
-        {/* Keep all pages mounted, only show active */}
-        {pages.map(([pid, node]) => (
-          <div key={pid} style={{ display: pid === page ? 'block' : 'none' }}>
-            {node}
-          </div>
-        ))}
+        {/* Keep all pages mounted, only show yang aktif DAN yang boleh diakses role ini */}
+        {pages
+          .filter(([pid]) => isPageAllowed(profile?.role, pid))
+          .map(([pid, node]) => (
+            <div key={pid} style={{ display: pid === page ? 'block' : 'none' }}>
+              {node}
+            </div>
+          ))}
       </main>
     </div>
   )
