@@ -40,7 +40,7 @@ export const COA: Akun[] = [
   { kode:'2.1.9',  nama:'Simpanan Sukarela',                kelompok:'Kewajiban Jk. Pendek', grup:'KEWAJIBAN', tipe:'K' },
   { kode:'2.1.10', nama:'Simpanan Wajib Khusus',            kelompok:'Kewajiban Jk. Pendek', grup:'KEWAJIBAN', tipe:'K' },
   { kode:'2.1.11', nama:'Simpanan lain-lain',               kelompok:'Kewajiban Jk. Pendek', grup:'KEWAJIBAN', tipe:'K' },
-  { kode:'2.1.12', nama:'Biaya ymh dibayar',                kelompok:'Kewajiban Jk. Pendek', grup:'KEWAJIBAN', tipe:'K' },
+  { kode:'2.1.12', nama:'Biaya Jasa Simpanan Sukarela yang Masih harus dibayar', kelompok:'Kewajiban Jk. Pendek', grup:'KEWAJIBAN', tipe:'K' },
   { kode:'2.1.13', nama:'Dana Asuransi',                    kelompok:'Kewajiban Jk. Pendek', grup:'KEWAJIBAN', tipe:'K' },
   { kode:'2.1.14', nama:'Tabungan Hari Tua',                kelompok:'Kewajiban Jk. Pendek', grup:'KEWAJIBAN', tipe:'K' },
   // ══ KEWAJIBAN JANGKA PANJANG ══

@@ -309,6 +309,7 @@ export function getKasBankMutasi(jurnal: JurnalEntry[]): KasBankMutasi {
 
 // ─── Akun simpanan yang relevan ───────────────────────────────────────────
 export const AKUN_KAS_BANK = ['1.1.1', '1.1.2']
+export const AKUN_JASA_SUK_YMH_DIBAYAR = '2.1.12'
 export const AKUN_SIMPANAN_MAP: Record<string, 'wajib' | 'wajib_khs' | 'sukarela' | 'jasa_suk' | 'tht' | 'jasa_tht'> = {
   '3.1.2':  'wajib',     // Simpanan Wajib (Ekuitas)
   '2.1.10': 'wajib_khs', // Simpanan Wajib Khusus
@@ -379,7 +380,28 @@ export function calcSimpananBulanan(jurnal: JurnalEntry[]): MutasiSimpananAnggot
   return result
 }
 
-// ─── Piutang SP per anggota per bulan ────────────────────────────────────
+// ─── Dampak jurnal thd SALDO AWAL JASA SIMPANAN SUKARELA per anggota ──────
+// Akun 2.1.12 (Biaya Jasa Simpanan Sukarela yang Masih harus dibayar) dipakai
+// saat jasa yang sudah ditetapkan itu DIBAYARKAN ke anggota:
+//   Debet 2.1.12  → jasa yang belum dibayar itu dilunasi → SALDO AWAL berkurang
+//   Kredit 2.1.12 → jasa baru ditetapkan lewat akun ini   → SALDO AWAL bertambah
+// Nama anggota diambil dari kolom "Keterangan" baris jurnal (r.ket), sama
+// seperti pola pencocokan nama di calcSimpananBulanan di atas.
+// Key hasil = nama anggota huruf kecil, value = total perubahan (bisa +/-).
+export function computeJasaSukDelta(entry: { rows: JurnalEntry['rows'] }): Record<string, number> {
+  const delta: Record<string, number> = {}
+  entry.rows.forEach(r => {
+    const nama = (r.ket || '').trim().toLowerCase()
+    if (!nama) return
+    if (r.kode_d === AKUN_JASA_SUK_YMH_DIBAYAR && r.debet) {
+      delta[nama] = (delta[nama] ?? 0) - r.debet
+    }
+    if (r.kode_k === AKUN_JASA_SUK_YMH_DIBAYAR && r.kredit) {
+      delta[nama] = (delta[nama] ?? 0) + r.kredit
+    }
+  })
+  return delta
+}
 export interface MutasiPiutangBulan {
   pokok: number      // angsuran pokok (Dr Kas/Bank | Cr 1.1.4) per bulan
   jasa: number       // jasa/bunga (Dr Kas/Bank | Cr 4.1.1) per bulan

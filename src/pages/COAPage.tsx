@@ -11,6 +11,12 @@ const GRUP_OPTIONS: TipeAkun[] = ['ASET','KEWAJIBAN','EKUITAS','PENDAPATAN','BEB
 
 const emptyForm = (): Akun => ({ kode: '', nama: '', kelompok: '', grup: 'ASET', tipe: 'D' })
 
+// Konten sebenarnya di-scroll di dalam <main id="main-content"> (lihat App.tsx),
+// bukan di window — jadi window.scrollTo tidak berefek apa-apa di sini.
+const scrollContentToTop = () => {
+  document.getElementById('main-content')?.scrollTo({ top: 0, behavior: 'smooth' })
+}
+
 const GRUP_COLOR: Record<string, string> = {
   ASET:'badge-blue', KEWAJIBAN:'badge-amber',
   EKUITAS:'badge-green', PENDAPATAN:'badge-green', BEBAN:'badge-red',
@@ -152,7 +158,7 @@ export default function COAPage() {
     setForm(emptyForm())
     setFormErr('')
     setMode('add')
-    window.scrollTo({ top: 0, behavior: 'smooth' })
+    scrollContentToTop()
   }
 
   const openEdit = (a: Akun) => {
@@ -160,7 +166,7 @@ export default function COAPage() {
     setOriginalKode(a.kode)
     setFormErr('')
     setMode('edit')
-    window.scrollTo({ top: 0, behavior: 'smooth' })
+    scrollContentToTop()
   }
 
   const handleSave = () => {
@@ -209,6 +215,7 @@ export default function COAPage() {
     setForm(emptyForm())
     setOriginalKode('')
     setFormErr('')
+    scrollContentToTop()
   }
 
   const handleDelete = (kode: string) => {
