@@ -69,12 +69,13 @@ export async function dbGetJurnal(): Promise<JurnalEntry[]> {
     if (data.length < pageSize) break // ini halaman terakhir, berhenti
   }
   return all.map(r => ({
-    id:         r.id,
-    tanggal:    r.tanggal,
-    nobukti:    r.nobukti,
-    keterangan: r.keterangan ?? '',
-    rows:       r.rows,
-    total:      Number(r.total),
+    id:             r.id,
+    tanggal:        r.tanggal,
+    nobukti:        r.nobukti,
+    keterangan:     r.keterangan ?? '',
+    rows:           r.rows,
+    total:          Number(r.total),
+    jasaSukSynced:  r.jasa_suk_synced ?? false,
   }))
 }
 
@@ -89,6 +90,9 @@ export async function dbAddJurnal(entry: Omit<JurnalEntry, 'id'>, isAutoNoBukti?
     keterangan: entry.keterangan,
     rows:       entry.rows,
     total:      entry.total,
+    // Jurnal baru selalu dianggap "synced" — dampaknya ke saldo jasa (akun
+    // 2.1.12) langsung diterapkan saat itu juga oleh addJurnal di store.
+    jasa_suk_synced: true,
   }).select('id, nobukti').single()
   if (error) {
     // Postgres code 23505 = unique_violation → nobukti sudah dipakai entri lain
@@ -124,6 +128,9 @@ export async function dbUpdateJurnal(id: number, entry: Omit<JurnalEntry, 'id'>)
     keterangan: entry.keterangan,
     rows:       entry.rows,
     total:      entry.total,
+    // Setelah diedit, dampak jasa (akun 2.1.12) sudah pasti diproses ulang
+    // sepenuhnya oleh updateJurnal di store — tandai synced.
+    jasa_suk_synced: true,
   }).eq('id', id)
   if (error) {
     if (error.code === '23505') {
@@ -133,6 +140,14 @@ export async function dbUpdateJurnal(id: number, entry: Omit<JurnalEntry, 'id'>)
     }
     throw error
   }
+}
+
+// Tandai sekumpulan jurnal lama sebagai "sudah disinkronkan" dampak jasa
+// (2.1.12)-nya, dipakai oleh fitur "Sinkronkan Saldo Jasa dari Jurnal Lama"
+// setelah preview-nya dikonfirmasi dan diterapkan ke saldo anggota.
+export async function dbMarkJurnalJasaSukSynced(ids: number[]) {
+  if (!isOnline() || ids.length === 0) return
+  await supabase.from('jurnal').update({ jasa_suk_synced: true }).in('id', ids)
 }
 
 export async function dbDeleteJurnal(id: number) {
