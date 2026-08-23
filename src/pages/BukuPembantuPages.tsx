@@ -1,7 +1,7 @@
 import React, { useMemo, useState, memo } from 'react'
 import { Save } from 'lucide-react'
 import { useAppStore } from '../store/useAppStore'
-import { computeSaldos, calcSHU, calcSimpananBulanan, calcPiutangSPBulanan, fmt } from '../utils/accounting'
+import { computeSaldos, calcSHU, calcSimpananBulanan, calcPiutangSPBulanan, fmt, buildJasaSukSyncPreview } from '../utils/accounting'
 import { printElement } from '../utils/printHelper'
 import { exportSimpananPinjaman, exportPiutangSP } from '../utils/exportExcel'
 import type { RekapRow, PiutangRow } from '../utils/exportExcel'
@@ -284,7 +284,7 @@ const SaldoAwalInput = memo(function SaldoAwalInput({
 })
 
 export function SimpananPage() {
-  const { anggota, saldoSimpanan, jurnal, identitas, updateSaldoSimpanan } = useAppStore()
+  const { anggota, saldoSimpanan, jurnal, identitas, updateSaldoSimpanan, applyJasaSukSync } = useAppStore()
 
   // Simpan saldo awal per anggota per field — dipanggil dari SaldoAwalInput
   const onSaveSA = React.useCallback((anggotaId: number, field: SimpField, val: number) => {
@@ -294,6 +294,8 @@ export function SimpananPage() {
   const [activeTab, setActiveTab] = useState<TabKey>('rekap')
   const [page,       setPage]     = useState(1)
   const [perPage]                 = useState(20)
+  const [syncPreview, setSyncPreview] = useState<ReturnType<typeof buildJasaSukSyncPreview> | null>(null)
+  const [syncing, setSyncing] = useState(false)
 
   // Saldo awal per anggota
   const saldoMap = useMemo(() => {
@@ -676,6 +678,13 @@ export function SimpananPage() {
         <input className="input max-w-xs" placeholder="Cari nama anggota..."
           value={search} onChange={e => setSearch(e.target.value)} />
         <span className="text-xs text-slate-400">{filtered.length} anggota total</span>
+        {activeTab === 'sukarela' && (
+          <button className="btn btn-sm bg-orange-500 text-white border-orange-500 hover:bg-orange-600"
+            title="Cek jurnal lama yang pakai akun 2.1.12 tapi belum pernah mengurangi/menambah Saldo Awal Jasa Simpanan Sukarela"
+            onClick={() => setSyncPreview(buildJasaSukSyncPreview(jurnal, anggota, saldoSimpanan))}>
+            🔄 Sinkronkan Saldo Jasa
+          </button>
+        )}
         <button className="btn btn-sm ml-auto"
           onClick={() => printElement('simpanan-print-area', `Simpanan Anggota — ${tab.label}`, identitas.nama)}>
           🖨️ Cetak
@@ -727,6 +736,93 @@ export function SimpananPage() {
           💡 Pilih tab di atas untuk berpindah antar jenis simpanan.
         </p>
       </div>
+
+      {/* ── Modal preview Sinkronkan Saldo Jasa dari Jurnal Lama ── */}
+      {syncPreview && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[85vh] overflow-y-auto">
+            <div className="p-4 border-b border-slate-200">
+              <h3 className="font-bold text-slate-800">Sinkronkan Saldo Jasa dari Jurnal Lama</h3>
+              <p className="text-xs text-slate-500 mt-1">
+                Jurnal lama yang pakai akun 2.1.12 (Biaya Jasa Simpanan Sukarela yang Masih harus dibayar)
+                tapi dampaknya belum pernah diterapkan ke Saldo Awal Jasa Simpanan Sukarela anggota.
+              </p>
+            </div>
+
+            <div className="p-4">
+              {syncPreview.rows.length === 0 && syncPreview.unmatched.length === 0 && (
+                <p className="text-sm text-slate-500">Tidak ada jurnal lama yang perlu disinkronkan. Semua sudah sesuai. ✅</p>
+              )}
+
+              {syncPreview.rows.length > 0 && (
+                <>
+                  <table className="w-full text-xs mb-4">
+                    <thead>
+                      <tr className="bg-slate-100 text-slate-600">
+                        <th className="text-left p-2">Nama</th>
+                        <th className="text-center p-2">Jml Jurnal</th>
+                        <th className="text-right p-2">Perubahan</th>
+                        <th className="text-right p-2">Saldo Sekarang</th>
+                        <th className="text-right p-2">Saldo Baru</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {syncPreview.rows.map(r => (
+                        <tr key={r.anggotaId} className="border-b border-slate-100">
+                          <td className="p-2">{r.nama}</td>
+                          <td className="p-2 text-center">{r.jumlahJurnal}</td>
+                          <td className={`p-2 text-right font-mono ${r.totalDelta < 0 ? 'text-red-600' : 'text-emerald-600'}`}>
+                            {r.totalDelta < 0 ? '-' : '+'}{fmt(Math.abs(r.totalDelta))}
+                          </td>
+                          <td className="p-2 text-right font-mono text-slate-500">{fmt(r.saldoSekarang)}</td>
+                          <td className="p-2 text-right font-mono font-semibold text-slate-800">{fmt(r.saldoBaru)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </>
+              )}
+
+              {syncPreview.unmatched.length > 0 && (
+                <div className="bg-amber-50 border border-amber-200 rounded p-3 text-xs">
+                  <p className="font-semibold text-amber-800 mb-1">⚠️ {syncPreview.unmatched.length} jurnal dilewati (nama tidak cocok anggota manapun)</p>
+                  <p className="text-amber-700 mb-2">Perbaiki nama di jurnal berikut dulu, baru jalankan sinkronisasi ini lagi:</p>
+                  <ul className="space-y-0.5 text-amber-700">
+                    {syncPreview.unmatched.map(u => (
+                      <li key={u.entryId}>• {u.tanggal} — {u.nobukti} — nama: "{u.namaTidakCocok}"</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+
+            <div className="p-4 border-t border-slate-200 flex justify-end gap-2">
+              <button className="btn btn-sm" onClick={() => setSyncPreview(null)} disabled={syncing}>
+                Batal
+              </button>
+              {syncPreview.rows.length > 0 && (
+                <button
+                  className="btn btn-sm bg-orange-500 text-white border-orange-500 hover:bg-orange-600"
+                  disabled={syncing}
+                  onClick={async () => {
+                    setSyncing(true)
+                    try {
+                      await applyJasaSukSync(
+                        syncPreview.rows.map(r => ({ anggotaId: r.anggotaId, jasaSukBaru: r.saldoBaru })),
+                        syncPreview.matchedEntryIds,
+                      )
+                      setSyncPreview(null)
+                    } finally {
+                      setSyncing(false)
+                    }
+                  }}>
+                  {syncing ? 'Menerapkan…' : `Terapkan ke ${syncPreview.rows.length} anggota`}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

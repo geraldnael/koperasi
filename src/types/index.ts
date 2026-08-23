@@ -40,6 +40,11 @@ export interface JurnalEntry {
   keterangan: string
   rows: JurnalBaris[]
   total: number
+  // Penanda internal: apakah dampak jurnal ini ke SALDO AWAL JASA SIMPANAN
+  // SUKARELA (akun 2.1.12) SUDAH diterapkan ke data anggota. Jurnal lama
+  // (dibuat sebelum fitur ini ada) defaultnya false/undefined sampai
+  // disinkronkan lewat menu "Sinkronkan Saldo Jasa dari Jurnal Lama".
+  jasaSukSynced?: boolean
 }
 
 export interface AppState {

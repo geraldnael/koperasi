@@ -7,7 +7,7 @@ import { COA } from '../utils/coa'
 import {
   dbGetIdentitas, dbSetIdentitas,
   dbGetSaldoAwal, dbSetSaldoAwal, dbUpdateSaldoAkun,
-  dbGetJurnal, dbAddJurnal, dbUpdateJurnal, dbDeleteJurnal, dbClearAllJurnal,
+  dbGetJurnal, dbAddJurnal, dbUpdateJurnal, dbDeleteJurnal, dbClearAllJurnal, dbMarkJurnalJasaSukSynced,
   dbGetSaldoSimpanan, dbUpdateSaldoSimpanan,
   dbGetSaldoPiutang, dbUpdateSaldoPiutang,
   dbGetArsipTahun, dbSetArsipTahun,
@@ -85,6 +85,9 @@ interface AppStore {
   addJurnal: (entry: Omit<JurnalEntry, 'id'>, isAutoNoBukti?: boolean) => Promise<void>
   updateJurnal: (id: number, entry: Omit<JurnalEntry, 'id'>) => Promise<void>
   deleteJurnal: (id: number) => Promise<void>
+  // Terapkan hasil sinkronisasi "Saldo Jasa dari Jurnal Lama": set saldo
+  // jasa akhir per anggota, lalu tandai jurnal-jurnal terkait sudah synced.
+  applyJasaSukSync: (updates: { anggotaId: number; jasaSukBaru: number }[], entryIds: number[]) => Promise<void>
   updateSaldoSimpanan: (anggotaId: number, data: Partial<Omit<SaldoSimpanan, 'anggotaId'>>) => void
   updatePiutangSP: (anggotaId: number, saldo: number, saldoJasa?: number) => void
   updateSaldoToko: (anggotaId: number, saldo: number) => void
@@ -282,7 +285,7 @@ export const useAppStore = create<AppStore>()(
           // (bukan sebelumnya saat klik tombol "auto") lewat trigger database.
           const saved = await dbAddJurnal(entry, isAutoNoBukti)
           set((s) => ({
-            jurnal: s.jurnal.map(j => j.id === tmpId ? { ...j, id: saved.id, nobukti: saved.nobukti } : j),
+            jurnal: s.jurnal.map(j => j.id === tmpId ? { ...j, id: saved.id, nobukti: saved.nobukti, jasaSukSynced: true } : j),
           }))
           // Update SALDO AWAL JASA SIMPANAN SUKARELA kalau jurnal ini pakai akun 2.1.12
           applyJasaSukDelta(computeJasaSukDelta(entry), get().anggota, get().saldoSimpanan, get().updateSaldoSimpanan)
@@ -303,19 +306,27 @@ export const useAppStore = create<AppStore>()(
       updateJurnal: async (id, entry) => {
         const prev = get().jurnal.find(j => j.id === id)
         set((s) => ({
-          jurnal: s.jurnal.map(j => j.id === id ? { ...j, ...entry } : j),
+          jurnal: s.jurnal.map(j => j.id === id ? { ...j, ...entry, jasaSukSynced: true } : j),
         }))
         try {
           await dbUpdateJurnal(id, entry)
-          // Batalkan dampak jurnal lama, lalu terapkan dampak jurnal baru
+          // Terapkan dampak akun 2.1.12 ke SALDO AWAL JASA SIMPANAN SUKARELA.
+          // Kalau jurnal lama ini BELUM PERNAH disinkronkan (jasaSukSynced
+          // false/kosong — jurnal lama dari sebelum fitur ini ada), dampak
+          // lamanya belum pernah diterapkan sama sekali, jadi yang diterapkan
+          // di sini adalah dampak PENUH dari isi jurnal yang baru (bukan
+          // cuma selisihnya). Kalau sudah pernah synced sebelumnya, baru
+          // dihitung selisih (dampak baru − dampak lama) supaya tidak dobel.
           if (prev) {
-            const deltaPrev = computeJasaSukDelta(prev)
-            const deltaNew  = computeJasaSukDelta(entry)
-            const netDelta: Record<string, number> = {}
-            for (const k of new Set([...Object.keys(deltaPrev), ...Object.keys(deltaNew)])) {
-              netDelta[k] = (deltaNew[k] ?? 0) - (deltaPrev[k] ?? 0)
+            const deltaNew = computeJasaSukDelta(entry)
+            const delta: Record<string, number> = deltaNew
+            if (prev.jasaSukSynced) {
+              const deltaPrev = computeJasaSukDelta(prev)
+              for (const k of new Set([...Object.keys(deltaPrev), ...Object.keys(deltaNew)])) {
+                delta[k] = (deltaNew[k] ?? 0) - (deltaPrev[k] ?? 0)
+              }
             }
-            applyJasaSukDelta(netDelta, get().anggota, get().saldoSimpanan, get().updateSaldoSimpanan)
+            applyJasaSukDelta(delta, get().anggota, get().saldoSimpanan, get().updateSaldoSimpanan)
           }
         } catch (e: any) {
           console.error('Gagal update jurnal ke server:', e)
@@ -331,8 +342,12 @@ export const useAppStore = create<AppStore>()(
         set((s) => ({ jurnal: s.jurnal.filter(j => j.id !== id) }))
         try {
           await dbDeleteJurnal(id)
-          // Batalkan dampak jurnal yang dihapus (kebalikan dari saat ditambah)
-          if (prev) {
+          // Batalkan dampak jurnal yang dihapus (kebalikan dari saat ditambah) —
+          // tapi HANYA kalau dampaknya memang sudah pernah diterapkan
+          // (jasaSukSynced true). Jurnal lama yang belum pernah disinkronkan
+          // tidak pernah menambah/mengurangi saldo apa pun, jadi menghapusnya
+          // juga tidak boleh mengubah saldo.
+          if (prev && prev.jasaSukSynced) {
             const deltaHapus = computeJasaSukDelta(prev)
             const reversed: Record<string, number> = {}
             Object.entries(deltaHapus).forEach(([k, v]) => { reversed[k] = -v })
@@ -342,6 +357,24 @@ export const useAppStore = create<AppStore>()(
           console.error('Gagal hapus jurnal di server:', e)
           if (prev) set((s) => ({ jurnal: [...s.jurnal, prev].sort((a, b) => b.id - a.id) }))
           alert('GAGAL menghapus jurnal di server (cek koneksi internet). Jurnal dikembalikan — silakan coba lagi.')
+        }
+      },
+
+      applyJasaSukSync: async (updates, entryIds) => {
+        // Terapkan saldo jasa akhir per anggota (dihitung di UI dari preview)
+        updates.forEach(({ anggotaId, jasaSukBaru }) => {
+          get().updateSaldoSimpanan(anggotaId, { jasa_suk: jasaSukBaru })
+        })
+        // Tandai jurnal-jurnal yang barusan disinkronkan supaya tidak
+        // terhitung dobel kalau fitur ini dijalankan lagi nanti
+        set((s) => ({
+          jurnal: s.jurnal.map(j => entryIds.includes(j.id) ? { ...j, jasaSukSynced: true } : j),
+        }))
+        try {
+          await dbMarkJurnalJasaSukSynced(entryIds)
+        } catch (e) {
+          console.error('Gagal menandai jurnal sudah disinkronkan:', e)
+          alert('Saldo sudah diperbarui, tapi GAGAL menandai jurnal sebagai synced di server (cek koneksi). Kalau fitur ini dijalankan lagi, jurnal yang sama mungkin muncul lagi di preview — cukup jalankan ulang, tidak akan merusak data.')
         }
       },
 

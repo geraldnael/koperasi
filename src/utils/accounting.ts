@@ -1,6 +1,7 @@
 import { COA } from './coa'
 import type { JurnalEntry } from '../types'
 import type { Akun } from '../types'
+import type { Anggota, SaldoSimpanan } from '../store/useAppStore'
 
 // Load COA including custom edits from localStorage
 function mergeCustom(custom: Akun[]): Akun[] {
@@ -401,6 +402,99 @@ export function computeJasaSukDelta(entry: { rows: JurnalEntry['rows'] }): Recor
     }
   })
   return delta
+}
+
+// ─── Preview sinkronisasi Saldo Awal Jasa Simpanan Sukarela ────────────────
+// Menyisir SEMUA jurnal yang belum pernah "disinkronkan" (jasaSukSynced
+// bukan true — biasanya jurnal lama dari sebelum fitur otomatis ini ada)
+// dan memakai akun 2.1.12, lalu menghitung dampaknya ke saldo tiap anggota.
+//
+// Entri dipisah jadi dua kelompok:
+//  - matched : nama di baris jurnal cocok dengan anggota yang ada → aman
+//              untuk langsung diterapkan
+//  - unmatched: nama tidak cocok anggota manapun (typo/nama fiktif) →
+//              TIDAK diterapkan, ditampilkan sebagai peringatan supaya
+//              nama-nya diperbaiki dulu di jurnal sebelum bisa disinkronkan
+export interface JasaSukSyncPreviewRow {
+  anggotaId: number
+  nama: string
+  jumlahJurnal: number
+  totalDelta: number
+  saldoSekarang: number
+  saldoBaru: number
+}
+
+export interface JasaSukSyncUnmatched {
+  entryId: number
+  nobukti: string
+  tanggal: string
+  namaTidakCocok: string
+}
+
+export interface JasaSukSyncPreview {
+  rows: JasaSukSyncPreviewRow[]
+  unmatched: JasaSukSyncUnmatched[]
+  matchedEntryIds: number[]
+}
+
+export function buildJasaSukSyncPreview(
+  jurnal: JurnalEntry[],
+  anggota: Anggota[],
+  saldoSimpanan: SaldoSimpanan[],
+): JasaSukSyncPreview {
+  const unmatched: JasaSukSyncUnmatched[] = []
+  const matchedEntryIds: number[] = []
+  // akumulasi per anggotaId
+  const acc: Record<number, { totalDelta: number; jumlahJurnal: number }> = {}
+
+  jurnal.forEach(entry => {
+    if (entry.jasaSukSynced) return // sudah pernah diproses, lewati
+    const rowsPakai2112 = entry.rows.filter(r => r.kode_d === AKUN_JASA_SUK_YMH_DIBAYAR || r.kode_k === AKUN_JASA_SUK_YMH_DIBAYAR)
+    if (rowsPakai2112.length === 0) return // jurnal ini tidak menyentuh 2.1.12 sama sekali
+
+    // Pastikan SEMUA nama di baris-baris terkait cocok dengan anggota,
+    // sebelum entri ini dianggap aman untuk disinkronkan
+    const namaTakCocok = rowsPakai2112
+      .map(r => (r.ket || '').trim())
+      .find(nama => !nama || !anggota.some(a => a.nama.trim().toLowerCase() === nama.toLowerCase()))
+
+    if (namaTakCocok !== undefined) {
+      unmatched.push({
+        entryId: entry.id,
+        nobukti: entry.nobukti,
+        tanggal: entry.tanggal,
+        namaTidakCocok: namaTakCocok || '(kosong)',
+      })
+      return
+    }
+
+    const delta = computeJasaSukDelta(entry)
+    Object.entries(delta).forEach(([namaLower, amount]) => {
+      if (!amount) return
+      const a = anggota.find(x => x.nama.trim().toLowerCase() === namaLower)
+      if (!a) return // seharusnya tidak terjadi (sudah dicek di atas), jaga-jaga saja
+      if (!acc[a.id]) acc[a.id] = { totalDelta: 0, jumlahJurnal: 0 }
+      acc[a.id].totalDelta += amount
+      acc[a.id].jumlahJurnal += 1
+    })
+    matchedEntryIds.push(entry.id)
+  })
+
+  const rows: JasaSukSyncPreviewRow[] = Object.entries(acc).map(([idStr, v]) => {
+    const anggotaId = Number(idStr)
+    const a = anggota.find(x => x.id === anggotaId)!
+    const saldoSekarang = saldoSimpanan.find(s => s.anggotaId === anggotaId)?.jasa_suk ?? 0
+    return {
+      anggotaId,
+      nama: a.nama,
+      jumlahJurnal: v.jumlahJurnal,
+      totalDelta: v.totalDelta,
+      saldoSekarang,
+      saldoBaru: saldoSekarang + v.totalDelta,
+    }
+  }).sort((a, b) => a.nama.localeCompare(b.nama))
+
+  return { rows, unmatched, matchedEntryIds }
 }
 export interface MutasiPiutangBulan {
   pokok: number      // angsuran pokok (Dr Kas/Bank | Cr 1.1.4) per bulan
