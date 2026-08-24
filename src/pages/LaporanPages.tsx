@@ -168,7 +168,7 @@ export function LabaRugiPage() {
   const shuKotor         = totalPend - totalBLangsung
   const totalBUsaha      = sum(bebanUsahaL)   || ['5.1.3','5.1.4','5.1.5','5.1.6'].reduce((s,k)=>s+K(k),0)
   const totalBAdm        = sum(bebanAdmL)     || ['5.1.7','5.1.8','5.1.9','5.1.10','5.1.11','5.1.12','5.1.13','5.1.14','5.1.15'].reduce((s,k)=>s+K(k),0)
-  const totalBKop        = sum(bebanKopL)     || ['5.1.16','5.1.17','5.1.18','5.1.19','5.1.20'].reduce((s,k)=>s+K(k),0)
+  const totalBKop        = sum(bebanKopL)     || ['5.1.16','5.1.17','5.1.18','5.1.19','5.1.20','5.1.21','5.1.22','5.1.23'].reduce((s,k)=>s+K(k),0)
   const jumlahBeban      = totalBLangsung + totalBUsaha + totalBAdm + totalBKop
   const shuDariUsaha     = shuKotor - totalBUsaha - totalBAdm - totalBKop
   const totalPLuar       = sum(pendLuarL)     || ['4.2.1','4.2.2','4.2.3'].reduce((s,k)=>s+K(k),0)
@@ -221,7 +221,7 @@ export function LabaRugiPage() {
 
         {/* BEBAN PERKOPERASIAN */}
         <LapHeader label="BEBAN PERKOPERASIAN" />
-        {renderAkun(bebanKopL, ['5.1.16','5.1.17','5.1.18','5.1.19','5.1.20'])}
+        {renderAkun(bebanKopL, ['5.1.16','5.1.17','5.1.18','5.1.19','5.1.20','5.1.21','5.1.22','5.1.23'])}
 
         <LapRow label="JUMLAH BEBAN" value={jumlahBeban} variant="subtotal" />
         <LapRow label="SHU DARI USAHA" value={shuDariUsaha} variant="total" />
@@ -365,7 +365,7 @@ export function ArusKasPage() {
   const pembelian       = Kl('5.1.1')
   const bebanUsahaSum   = sumK(['5.1.2','5.1.3','5.1.4','5.1.5','5.1.6'])
   const bebanAdmSum     = sumK(['5.1.7','5.1.8','5.1.9','5.1.10','5.1.11','5.1.12','5.1.13','5.1.14','5.1.15'])
-  const bebanKopSum     = sumK(['5.1.16','5.1.17','5.1.18','5.1.19','5.1.20'])
+  const bebanKopSum     = sumK(['5.1.16','5.1.17','5.1.18','5.1.19','5.1.20','5.1.21','5.1.22','5.1.23'])
   const pengeluaranSP   = Kl('1.1.4')
   const utangUsaha      = Kl('2.1.1')
   const pembayaranSHU   = Kl('3.1.5')
@@ -406,7 +406,7 @@ export function ArusKasPage() {
   ]
   const KODE_KELUAR_DIKENAL = [
     '5.1.1','5.1.2','5.1.3','5.1.4','5.1.5','5.1.6','5.1.7','5.1.8','5.1.9','5.1.10',
-    '5.1.11','5.1.12','5.1.13','5.1.14','5.1.15','5.1.16','5.1.17','5.1.18','5.1.19','5.1.20',
+    '5.1.11','5.1.12','5.1.13','5.1.14','5.1.15','5.1.16','5.1.17','5.1.18','5.1.19','5.1.20','5.1.21','5.1.22','5.1.23',
     '1.1.4','2.1.1','3.1.5','1.1.10','2.1.9','2.1.10','2.1.11','5.2.4',
     '1.2.3','1.2.4','1.2.5','1.2.6','1.2.7','1.2.8','1.2.9','3.1.1','3.1.2','2.2.1',
   ]
@@ -484,7 +484,7 @@ export function ArusKasPage() {
         <LapRow label="5.1.1 — Pembelian / HPP Toko"              value={pembelian}       indent={1} />
         <LapRow label="Beban Usaha (5.1.2–5.1.6)"                 value={bebanUsahaSum}   indent={1} />
         <LapRow label="Beban Adm & Umum (5.1.7–5.1.15)"           value={bebanAdmSum}     indent={1} />
-        <LapRow label="Beban Perkoperasian (5.1.16–5.1.20)"       value={bebanKopSum}     indent={1} />
+        <LapRow label="Beban Perkoperasian (5.1.16–5.1.23)"       value={bebanKopSum}     indent={1} />
         <LapRow label="1.1.4 — Piutang Simpan Pinjam"             value={pengeluaranSP}   indent={1} />
         <LapRow label="2.1.1 — Utang Usaha"                       value={utangUsaha}      indent={1} />
         <LapRow label="3.1.5 — Pembayaran Dana-Dana SHU"          value={pembayaranSHU}   indent={1} />

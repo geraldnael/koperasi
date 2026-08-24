@@ -92,7 +92,7 @@ export function computeSaldos(
     (saldo['4.1.7']??0)+(saldo['4.1.8']??0)
   const bebanUsaha = ['5.1.1','5.1.2','5.1.3','5.1.4','5.1.5','5.1.6','5.1.7','5.1.8',
     '5.1.9','5.1.10','5.1.11','5.1.12','5.1.13','5.1.14','5.1.15','5.1.16','5.1.17',
-    '5.1.18','5.1.19','5.1.20'].reduce((s,k)=>s+(saldo[k]??0),0)
+    '5.1.18','5.1.19','5.1.20','5.1.21','5.1.22','5.1.23'].reduce((s,k)=>s+(saldo[k]??0),0)
   const pendLuar  = (saldo['4.2.1']??0)+(saldo['4.2.2']??0)+(saldo['4.2.3']??0)
   const bebanLuar = (saldo['5.2.1']??0)+(saldo['5.2.2']??0)+(saldo['5.2.3']??0)
   const shuBersihCalc = pendUsaha - bebanUsaha + pendLuar - bebanLuar
@@ -215,7 +215,7 @@ export function calcSHU(saldos: Record<string, number>) {
   const labaKotor   = totalPendUsaha - (hpp + bebanBunga + bebanJual)
 
   const bebanAdm = sum(['5.1.7','5.1.8','5.1.9','5.1.10','5.1.11','5.1.12','5.1.13','5.1.14','5.1.15'])
-  const bebanKop = sum(['5.1.16','5.1.17','5.1.18','5.1.19','5.1.20'])
+  const bebanKop = sum(['5.1.16','5.1.17','5.1.18','5.1.19','5.1.20','5.1.21','5.1.22','5.1.23'])
   const shuUsaha = labaKotor - bebanAdm - bebanKop
 
   const pendLuar  = sum(['4.2.1','4.2.2','4.2.3'])
@@ -240,7 +240,7 @@ export function calcArusKas(saldos: Record<string, number>, saldoAwal: Record<st
                      + r('2.1.8') + r('2.1.9') + r('2.2.3')
   const pengeluaranOp = r('5.1.1') + sum(['5.1.2','5.1.3','5.1.4','5.1.5','5.1.6',
                          '5.1.7','5.1.8','5.1.9','5.1.10','5.1.12','5.1.13','5.1.14',
-                         '5.1.16','5.1.17','5.1.18','5.1.19','5.1.20'])
+                         '5.1.16','5.1.17','5.1.18','5.1.19','5.1.20','5.1.21','5.1.22','5.1.23'])
   const netOperasi = penerimaanOp - pengeluaranOp
 
   const investIn  = r('4.2.2')
