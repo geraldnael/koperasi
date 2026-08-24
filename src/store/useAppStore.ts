@@ -6,6 +6,7 @@ import { computeSaldos, computeJasaSukDelta } from '../utils/accounting'
 import { COA } from '../utils/coa'
 import {
   dbGetIdentitas, dbSetIdentitas,
+  dbGetCustomCOA, dbSetCustomCOA,
   dbGetSaldoAwal, dbSetSaldoAwal, dbUpdateSaldoAkun,
   dbGetJurnal, dbAddJurnal, dbUpdateJurnal, dbDeleteJurnal, dbClearAllJurnal, dbMarkJurnalJasaSukSynced,
   dbGetSaldoSimpanan, dbUpdateSaldoSimpanan,
@@ -174,13 +175,14 @@ export const useAppStore = create<AppStore>()(
           // kosong (first-run), supaya tidak perlu input manual satu-satu
           await dbSeedAnggotaIfEmpty(get().anggota).catch(() => {})
 
-          const [identitas, saldoAwal, jurnal, saldoSimpanan, piutangSP, anggota] = await Promise.all([
+          const [identitas, saldoAwal, jurnal, saldoSimpanan, piutangSP, anggota, customCOA] = await Promise.all([
             dbGetIdentitas(),
             dbGetSaldoAwal(),
             dbGetJurnal(),
             dbGetSaldoSimpanan(),
             dbGetSaldoPiutang(),
             dbGetAnggota(),
+            dbGetCustomCOA(),
           ])
 
           // Selalu overwrite — termasuk saat ada DELETE di device lain
@@ -200,7 +202,17 @@ export const useAppStore = create<AppStore>()(
             nextAnggotaId: anggota.length > 0
                              ? Math.max(...anggota.map(a => a.id)) + 1
                              : get().nextAnggotaId,
+            // customCOA: kalau server BELUM PERNAH punya baris (null = belum
+            // pernah disimpan sekalipun), pakai data lokal (localStorage) apa
+            // adanya dan langsung dorong ke server supaya device lain ikut
+            // dapat. Kalau server SUDAH punya baris (termasuk array kosong,
+            // artinya semua custom akun sudah dihapus dari device lain),
+            // server jadi acuan (overwrite lokal).
+            ...(customCOA !== null ? { customCOA } : {}),
           })
+          if (customCOA === null && get().customCOA.length > 0) {
+            dbSetCustomCOA(get().customCOA).catch(() => {})
+          }
         } catch (e) {
           console.error('Sync error:', e)
           set({ syncStatus: 'error' })
@@ -254,6 +266,9 @@ export const useAppStore = create<AppStore>()(
       setCustomCOA: (akun) => {
         set({ customCOA: akun })
         localStorage.setItem('sia-koperasi-custom-coa', JSON.stringify(akun))
+        dbSetCustomCOA(akun).catch(e => {
+          console.error('Gagal sinkron Bagan Akun ke server:', e)
+        })
       },
       setSaldoAwal: (saldo) => {
         set({ saldoAwal: saldo })

@@ -18,6 +18,21 @@ export async function dbSetIdentitas(identitas: Identitas) {
   await supabase.from('identitas').upsert({ id: 1, data: identitas, updated_at: new Date().toISOString() })
 }
 
+// ── CUSTOM COA (Bagan Akun yang diedit/ditambah manual) ────────────────────
+// Disimpan sebagai satu baris JSON (mirip identitas), supaya perubahan COA
+// tersinkron ke semua device/browser lewat Supabase — sebelumnya cuma
+// tersimpan di localStorage sehingga tidak konsisten antar device.
+export async function dbGetCustomCOA(): Promise<import('../types').Akun[] | null> {
+  if (!isOnline()) return null
+  const { data } = await supabase.from('custom_coa').select('data').eq('id', 1).single()
+  return data?.data ?? null
+}
+
+export async function dbSetCustomCOA(akun: import('../types').Akun[]) {
+  if (!isOnline()) return
+  await supabase.from('custom_coa').upsert({ id: 1, data: akun, updated_at: new Date().toISOString() })
+}
+
 // ── SALDO AWAL ────────────────────────────────────────────────────────────
 export async function dbGetSaldoAwal(): Promise<Record<string, number>> {
   if (!isOnline()) return {}

@@ -544,9 +544,10 @@ export function calcPiutangSPBulanan(
   }
 
   // Akun yang relevan untuk piutang SP:
-  // 1.1.4 = Piutang Simpan Pinjam (debet = realisasi pinjaman baru)
+  // 1.1.4 = Piutang Simpan Pinjam
   // 4.1.1 = Pendapatan Jasa Pinjaman (kredit = jasa/bunga)
-  // Angsuran pokok: kredit di akun selain 4.1.1 dengan keterangan nama anggota
+  // Aturan Saldo Piutang: DEBIT ke 1.1.4 → mengurangi saldo piutang,
+  // KREDIT ke 1.1.4 → menambah saldo piutang.
   const AKUN_PIUTANG  = '1.1.4'
   const AKUN_JASA_SP  = '4.1.1'
 
@@ -563,18 +564,19 @@ export function calcPiutangSPBulanan(
       if (!debet && !kredit) return
 
       // Hanya proses baris yang terkait akun piutang SP atau jasa pinjaman
-      const isRealisasi  = r.kode_d === AKUN_PIUTANG && debet > 0   // realisasi pinjaman baru
-      const isAngsuran   = r.kode_k === AKUN_PIUTANG && kredit > 0  // angsuran pokok
-      const isJasa       = r.kode_k === AKUN_JASA_SP && kredit > 0  // bayar jasa/bunga
+      const isDebitPiutang  = r.kode_d === AKUN_PIUTANG && debet > 0   // mengurangi saldo piutang
+      const isKreditPiutang = r.kode_k === AKUN_PIUTANG && kredit > 0  // menambah saldo piutang
+      const isJasa          = r.kode_k === AKUN_JASA_SP && kredit > 0  // bayar jasa/bunga
 
-      if (!isRealisasi && !isAngsuran && !isJasa) return
+      if (!isDebitPiutang && !isKreditPiutang && !isJasa) return
 
       const k = ensureAnggota(nama)
 
-      if (isRealisasi) {
+      if (isDebitPiutang) {
         result[k].realisasiPokok += debet
+        result[k].bulan[bulan].pokok -= debet
       }
-      if (isAngsuran) {
+      if (isKreditPiutang) {
         result[k].bulan[bulan].pokok += kredit
       }
       if (isJasa) {

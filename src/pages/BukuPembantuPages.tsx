@@ -1217,8 +1217,8 @@ export function TokoPage() {
   }, [anggota, saldoToko])
 
   // Hitung mutasi piutang toko per anggota per bulan dari jurnal
-  // Penjualan (belanja): Debet 1.1.6 (piutang toko bertambah)
-  // Angsuran/bayar: Kredit 1.1.6 (piutang toko berkurang)
+  // Aturan Saldo Piutang Toko (sama seperti Piutang Anggota):
+  // DEBIT ke 1.1.6 → mengurangi saldo piutang, KREDIT ke 1.1.6 → menambah saldo piutang.
   const AKUN_PIUTANG_TOKO = '1.1.6'
   const mutasi = useMemo(() => {
     const result: Record<string, Record<number, { jual: number; bayar: number }>> = {}
@@ -1255,8 +1255,8 @@ export function TokoPage() {
 
     const totalJual  = Object.values(bulan).reduce((s, b) => s + b.jual,  0)
     const totalBayar = Object.values(bulan).reduce((s, b) => s + b.bayar, 0)
-    // Saldo Akhir = Saldo Awal + Total Penjualan (belanja) - Total Angsuran
-    const saldoAkhir   = saldoAwal + totalJual - totalBayar
+    // Saldo Akhir = Saldo Awal − Total Debit (jual) + Total Kredit (bayar)
+    const saldoAkhir   = saldoAwal - totalJual + totalBayar
     const hasActivity  = saldoAwal > 0 || totalJual > 0
 
     return { id: a.id, nama: a.nama, saldoAwal, bulan, totalJual, totalBayar, saldoAkhir, hasActivity }
@@ -1343,8 +1343,8 @@ export function TokoPage() {
       </div>
 
       <div className="bg-blue-50 border border-blue-200 text-blue-700 text-xs rounded-lg px-4 py-2 mb-4">
-        💡 <strong>Rumus:</strong> Saldo Akhir Piutang Toko = Saldo Awal + Total Penjualan − Total Angsuran<br/>
-        Akun <strong>1.1.6 Piutang Toko</strong>: Debet = belanja baru · Kredit = bayar/angsuran.<br/>
+        💡 <strong>Rumus:</strong> Saldo Akhir Piutang Toko = Saldo Awal − Total Debit (belanja) + Total Kredit (bayar/angsuran)<br/>
+        Akun <strong>1.1.6 Piutang Toko</strong>: Debet mengurangi saldo · Kredit menambah saldo.<br/>
         Klik <strong>Saldo Awal</strong> untuk edit. Kolom bulan otomatis dari Jurnal Umum.
       </div>
 

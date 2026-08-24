@@ -16,7 +16,7 @@ import { useAuthStore } from './store/useAuthStore'
 import { supabase, isOnline } from './lib/supabase'
 import {
   dbGetIdentitas, dbGetSaldoAwal, dbGetJurnal,
-  dbGetSaldoSimpanan, dbGetSaldoPiutang,
+  dbGetSaldoSimpanan, dbGetSaldoPiutang, dbGetCustomCOA,
 } from './lib/db'
 
 // ── Debounce helper ────────────────────────────────────────────────────────
@@ -97,6 +97,12 @@ export default function App() {
     if (identitas) useAppStore.setState({ identitas, syncStatus: 'synced' })
   }, 300)
 
+  const handleCustomCOAChange = useDebounce(async () => {
+    if (!isOnline()) return
+    const customCOA = await dbGetCustomCOA()
+    if (customCOA !== null) useAppStore.setState({ customCOA, syncStatus: 'synced' })
+  }, 300)
+
   // ── Realtime subscription ────────────────────────────────────────────────
   useEffect(() => {
     if (!isOnline() || !session) return
@@ -115,6 +121,8 @@ export default function App() {
         () => { useAppStore.setState({ syncStatus: 'loading' }); handlePiutangChange() })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'identitas' },
         () => { useAppStore.setState({ syncStatus: 'loading' }); handleIdentitasChange() })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'custom_coa' },
+        () => { useAppStore.setState({ syncStatus: 'loading' }); handleCustomCOAChange() })
       .subscribe((status) => {
         if (status === 'SUBSCRIBED') {
           console.log('[Realtime] Connected ✓')
