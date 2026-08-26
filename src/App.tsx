@@ -15,9 +15,10 @@ import { useAppStore } from './store/useAppStore'
 import { useAuthStore } from './store/useAuthStore'
 import { supabase, isOnline } from './lib/supabase'
 import {
-  dbGetIdentitas, dbGetSaldoAwal, dbGetJurnal,
-  dbGetSaldoSimpanan, dbGetSaldoPiutang, dbGetCustomCOA,
+  dbGetIdentitas, dbGetCustomCOA,
 } from './lib/db'
+import type { JurnalEntry } from './types'
+import type { SaldoSimpanan } from './store/useAppStore'
 
 // ── Debounce helper ────────────────────────────────────────────────────────
 function useDebounce(fn: () => void, delay: number) {
@@ -56,41 +57,105 @@ export default function App() {
   }, [session])
 
   // ── Granular realtime handlers ──────────────────────────────────────────
-  // Setiap tabel punya handler sendiri yang hanya fetch tabel itu saja,
-  // bukan full syncFromSupabase() — lebih ringan dan lebih cepat.
-
-  const handleJurnalChange = useDebounce(async () => {
-    if (!isOnline()) return
-    const jurnal = await dbGetJurnal()
-    useAppStore.setState({
-      jurnal,
-      nextJurnalId: jurnal.length > 0 ? Math.max(...jurnal.map(j => j.id)) + 1 : 1,
-      syncStatus: 'synced',
+  // PENTING (perbaikan performa): handler-handler ini TIDAK fetch ulang
+  // seluruh tabel dari server. Payload `postgres_changes` dari Supabase
+  // SUDAH berisi baris yang berubah (payload.new / payload.old), jadi kita
+  // cukup "tempel" (patch) baris itu ke state lokal.
+  //
+  // Sebelumnya: setiap ADA SATU perubahan jurnal (dari siapa pun), SEMUA
+  // device yang sedang buka aplikasi akan download ULANG SELURUH tabel
+  // jurnal (ribuan baris) secara bersamaan. Ini "thundering herd" — makin
+  // banyak data & makin banyak orang buka bareng, makin berat, apalagi di
+  // Supabase Free tier yang jatah koneksi/compute-nya terbatas. Sekarang
+  // tiap device cukup update satu baris yang memang berubah → jauh lebih
+  // ringan meskipun datanya sudah ribuan baris atau dibuka puluhan device
+  // sekaligus.
+  const handleJurnalChange = (payload: { eventType: string; new: any; old: any }) => {
+    useAppStore.setState((s) => {
+      if (payload.eventType === 'DELETE') {
+        return { jurnal: s.jurnal.filter(j => j.id !== payload.old.id), syncStatus: 'synced' }
+      }
+      const r = payload.new
+      const mapped: JurnalEntry = {
+        id:             r.id,
+        tanggal:        r.tanggal,
+        nobukti:        r.nobukti,
+        keterangan:     r.keterangan ?? '',
+        rows:           r.rows,
+        total:          Number(r.total),
+        jasaSukSynced:  r.jasa_suk_synced ?? false,
+      }
+      const exists = s.jurnal.some(j => j.id === mapped.id)
+      const jurnal = exists
+        ? s.jurnal.map(j => j.id === mapped.id ? mapped : j)
+        : [mapped, ...s.jurnal]
+      return {
+        jurnal,
+        nextJurnalId: Math.max(s.nextJurnalId, mapped.id + 1),
+        syncStatus: 'synced',
+      }
     })
-  }, 300)
+  }
 
-  const handleSaldoAwalChange = useDebounce(async () => {
-    if (!isOnline()) return
-    const saldoAwal = await dbGetSaldoAwal()
-    if (Object.keys(saldoAwal).length > 0) {
-      useAppStore.setState({ saldoAwal, syncStatus: 'synced' })
-    }
-  }, 300)
+  const handleSaldoAwalChange = (payload: { eventType: string; new: any; old: any }) => {
+    useAppStore.setState((s) => {
+      if (payload.eventType === 'DELETE') {
+        const c = { ...s.saldoAwal }
+        delete c[payload.old.kode]
+        return { saldoAwal: c, syncStatus: 'synced' }
+      }
+      const r = payload.new
+      return { saldoAwal: { ...s.saldoAwal, [r.kode]: Number(r.nilai) }, syncStatus: 'synced' }
+    })
+  }
 
-  const handleSimpananChange = useDebounce(async () => {
-    if (!isOnline()) return
-    const saldoSimpanan = await dbGetSaldoSimpanan()
-    if (saldoSimpanan.length > 0) {
-      useAppStore.setState({ saldoSimpanan, syncStatus: 'synced' })
-    }
-  }, 300)
+  const handleSimpananChange = (payload: { eventType: string; new: any; old: any }) => {
+    useAppStore.setState((s) => {
+      if (payload.eventType === 'DELETE') {
+        return { saldoSimpanan: s.saldoSimpanan.filter(x => x.anggotaId !== payload.old.anggota_no), syncStatus: 'synced' }
+      }
+      const r = payload.new
+      const mapped: SaldoSimpanan = {
+        anggotaId: r.anggota_no,
+        pokok:     Number(r.pokok),
+        wajib:     Number(r.wajib),
+        wajib_khs: Number(r.wajib_khs),
+        sukarela:  Number(r.sukarela),
+        jasa_suk:  Number(r.jasa_suk),
+        tht:       Number(r.tht),
+        jasa_tht:  Number(r.jasa_tht),
+        pinjaman:  Number(r.pinjaman),
+      }
+      const exists = s.saldoSimpanan.some(x => x.anggotaId === mapped.anggotaId)
+      const saldoSimpanan = exists
+        ? s.saldoSimpanan.map(x => x.anggotaId === mapped.anggotaId ? mapped : x)
+        : [...s.saldoSimpanan, mapped]
+      return { saldoSimpanan, syncStatus: 'synced' }
+    })
+  }
 
-  const handlePiutangChange = useDebounce(async () => {
-    if (!isOnline()) return
-    const piutangSP = await dbGetSaldoPiutang()
-    useAppStore.setState({ piutangSP, syncStatus: 'synced' })
-  }, 300)
+  const handlePiutangChange = (payload: { eventType: string; new: any; old: any }) => {
+    useAppStore.setState((s) => {
+      if (payload.eventType === 'DELETE') {
+        return { piutangSP: s.piutangSP.filter(x => x.anggotaId !== payload.old.anggota_no), syncStatus: 'synced' }
+      }
+      const r = payload.new
+      const mapped = {
+        anggotaId:     r.anggota_no,
+        saldoAwal:     Number(r.saldo_awal),
+        saldoAwalJasa: Number(r.saldo_awal_jasa ?? 0),
+      }
+      const exists = s.piutangSP.some(x => x.anggotaId === mapped.anggotaId)
+      const piutangSP = exists
+        ? s.piutangSP.map(x => x.anggotaId === mapped.anggotaId ? mapped : x)
+        : [...s.piutangSP, mapped]
+      return { piutangSP, syncStatus: 'synced' }
+    })
+  }
 
+  // Identitas & Bagan Akun: tabel kecil (1 baris/beberapa puluh baris) dan
+  // jarang berubah, jadi tetap pakai full refetch — lebih simpel, dan
+  // dampaknya ke performa dapat diabaikan dibanding jurnal/saldo di atas.
   const handleIdentitasChange = useDebounce(async () => {
     if (!isOnline()) return
     const identitas = await dbGetIdentitas()
@@ -112,13 +177,13 @@ export default function App() {
         config: { broadcast: { self: false } }, // tidak trigger untuk perubahan dari device sendiri
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'jurnal' },
-        () => { useAppStore.setState({ syncStatus: 'loading' }); handleJurnalChange() })
+        (payload) => handleJurnalChange(payload as any))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'saldo_awal' },
-        () => { useAppStore.setState({ syncStatus: 'loading' }); handleSaldoAwalChange() })
+        (payload) => handleSaldoAwalChange(payload as any))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'saldo_simpanan' },
-        () => { useAppStore.setState({ syncStatus: 'loading' }); handleSimpananChange() })
+        (payload) => handleSimpananChange(payload as any))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'saldo_piutang' },
-        () => { useAppStore.setState({ syncStatus: 'loading' }); handlePiutangChange() })
+        (payload) => handlePiutangChange(payload as any))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'identitas' },
         () => { useAppStore.setState({ syncStatus: 'loading' }); handleIdentitasChange() })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'custom_coa' },
