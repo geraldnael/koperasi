@@ -1,7 +1,7 @@
 import React, { useMemo, useState, memo } from 'react'
 import { Save } from 'lucide-react'
 import { useAppStore } from '../store/useAppStore'
-import { computeSaldos, calcSHU, calcSimpananBulanan, calcPiutangSPBulanan, fmt, buildJasaSukSyncPreview } from '../utils/accounting'
+import { computeSaldos, calcSHU, calcSimpananBulanan, calcPiutangSPBulanan, fmt, buildJasaSyncPreview } from '../utils/accounting'
 import { printElement } from '../utils/printHelper'
 import { exportSimpananPinjaman, exportPiutangSP } from '../utils/exportExcel'
 import type { RekapRow, PiutangRow } from '../utils/exportExcel'
@@ -294,7 +294,7 @@ export function SimpananPage() {
   const [activeTab, setActiveTab] = useState<TabKey>('rekap')
   const [page,       setPage]     = useState(1)
   const [perPage]                 = useState(20)
-  const [syncPreview, setSyncPreview] = useState<ReturnType<typeof buildJasaSukSyncPreview> | null>(null)
+  const [syncPreview, setSyncPreview] = useState<ReturnType<typeof buildJasaSyncPreview> | null>(null)
   const [syncing, setSyncing] = useState(false)
 
   // Saldo awal per anggota
@@ -678,10 +678,10 @@ export function SimpananPage() {
         <input className="input max-w-xs" placeholder="Cari nama anggota..."
           value={search} onChange={e => setSearch(e.target.value)} />
         <span className="text-xs text-slate-400">{filtered.length} anggota total</span>
-        {activeTab === 'sukarela' && (
+        {(activeTab === 'sukarela' || activeTab === 'tht') && (
           <button className="btn btn-sm bg-orange-500 text-white border-orange-500 hover:bg-orange-600"
-            title="Cek jurnal lama yang pakai akun 2.1.12 tapi belum pernah mengurangi/menambah Saldo Awal Jasa Simpanan Sukarela"
-            onClick={() => setSyncPreview(buildJasaSukSyncPreview(jurnal, anggota, saldoSimpanan))}>
+            title="Cek jurnal lama yang pakai akun 2.1.12 tapi belum pernah mengurangi/menambah Saldo Awal Jasa Simpanan Sukarela / Jasa THT"
+            onClick={() => setSyncPreview(buildJasaSyncPreview(jurnal, anggota, saldoSimpanan))}>
             🔄 Sinkronkan Saldo Jasa
           </button>
         )}
@@ -740,12 +740,13 @@ export function SimpananPage() {
       {/* ── Modal preview Sinkronkan Saldo Jasa dari Jurnal Lama ── */}
       {syncPreview && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[85vh] overflow-y-auto">
+          <div className="bg-white rounded-lg shadow-xl max-w-3xl w-full max-h-[85vh] overflow-y-auto">
             <div className="p-4 border-b border-slate-200">
               <h3 className="font-bold text-slate-800">Sinkronkan Saldo Jasa dari Jurnal Lama</h3>
               <p className="text-xs text-slate-500 mt-1">
                 Jurnal lama yang pakai akun 2.1.12 (Biaya Jasa Simpanan Sukarela yang Masih harus dibayar)
-                tapi dampaknya belum pernah diterapkan ke Saldo Awal Jasa Simpanan Sukarela anggota.
+                tapi dampaknya belum pernah diterapkan ke Saldo Awal Jasa Simpanan Sukarela / Jasa THT anggota.
+                Ditentukan dari kata "THT" di keterangan jurnal — kalau tidak ada, dianggap Jasa Simpanan Sukarela.
               </p>
             </div>
 
@@ -759,11 +760,18 @@ export function SimpananPage() {
                   <table className="w-full text-xs mb-4">
                     <thead>
                       <tr className="bg-slate-100 text-slate-600">
-                        <th className="text-left p-2">Nama</th>
-                        <th className="text-center p-2">Jml Jurnal</th>
+                        <th rowSpan={2} className="text-left p-2 align-bottom">Nama</th>
+                        <th rowSpan={2} className="text-center p-2 align-bottom">Jml<br/>Jurnal</th>
+                        <th colSpan={3} className="text-center p-2 border-b border-slate-200">Jasa Simpanan Sukarela</th>
+                        <th colSpan={3} className="text-center p-2 border-b border-slate-200">Jasa THT</th>
+                      </tr>
+                      <tr className="bg-slate-100 text-slate-600">
                         <th className="text-right p-2">Perubahan</th>
-                        <th className="text-right p-2">Saldo Sekarang</th>
-                        <th className="text-right p-2">Saldo Baru</th>
+                        <th className="text-right p-2">Sekarang</th>
+                        <th className="text-right p-2">Baru</th>
+                        <th className="text-right p-2">Perubahan</th>
+                        <th className="text-right p-2">Sekarang</th>
+                        <th className="text-right p-2">Baru</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -771,11 +779,28 @@ export function SimpananPage() {
                         <tr key={r.anggotaId} className="border-b border-slate-100">
                           <td className="p-2">{r.nama}</td>
                           <td className="p-2 text-center">{r.jumlahJurnal}</td>
-                          <td className={`p-2 text-right font-mono ${r.totalDelta < 0 ? 'text-red-600' : 'text-emerald-600'}`}>
-                            {r.totalDelta < 0 ? '-' : '+'}{fmt(Math.abs(r.totalDelta))}
-                          </td>
-                          <td className="p-2 text-right font-mono text-slate-500">{fmt(r.saldoSekarang)}</td>
-                          <td className="p-2 text-right font-mono font-semibold text-slate-800">{fmt(r.saldoBaru)}</td>
+                          {r.deltaSuk !== 0 ? (
+                            <>
+                              <td className={`p-2 text-right font-mono ${r.deltaSuk < 0 ? 'text-red-600' : 'text-emerald-600'}`}>
+                                {r.deltaSuk < 0 ? '-' : '+'}{fmt(Math.abs(r.deltaSuk))}
+                              </td>
+                              <td className="p-2 text-right font-mono text-slate-500">{fmt(r.saldoSukSekarang)}</td>
+                              <td className="p-2 text-right font-mono font-semibold text-slate-800">{fmt(r.saldoSukBaru)}</td>
+                            </>
+                          ) : (
+                            <td colSpan={3} className="p-2 text-center text-slate-300">—</td>
+                          )}
+                          {r.deltaTht !== 0 ? (
+                            <>
+                              <td className={`p-2 text-right font-mono ${r.deltaTht < 0 ? 'text-red-600' : 'text-emerald-600'}`}>
+                                {r.deltaTht < 0 ? '-' : '+'}{fmt(Math.abs(r.deltaTht))}
+                              </td>
+                              <td className="p-2 text-right font-mono text-slate-500">{fmt(r.saldoThtSekarang)}</td>
+                              <td className="p-2 text-right font-mono font-semibold text-slate-800">{fmt(r.saldoThtBaru)}</td>
+                            </>
+                          ) : (
+                            <td colSpan={3} className="p-2 text-center text-slate-300">—</td>
+                          )}
                         </tr>
                       ))}
                     </tbody>
@@ -808,7 +833,11 @@ export function SimpananPage() {
                     setSyncing(true)
                     try {
                       await applyJasaSukSync(
-                        syncPreview.rows.map(r => ({ anggotaId: r.anggotaId, jasaSukBaru: r.saldoBaru })),
+                        syncPreview.rows.map(r => ({
+                          anggotaId: r.anggotaId,
+                          ...(r.deltaSuk !== 0 ? { jasaSukBaru: r.saldoSukBaru } : {}),
+                          ...(r.deltaTht !== 0 ? { jasaThtBaru: r.saldoThtBaru } : {}),
+                        })),
                         syncPreview.matchedEntryIds,
                       )
                       setSyncPreview(null)
@@ -1218,7 +1247,7 @@ export function TokoPage() {
 
   // Hitung mutasi piutang toko per anggota per bulan dari jurnal
   // Aturan Saldo Piutang Toko (sama seperti Piutang Anggota):
-  // DEBIT ke 1.1.6 → mengurangi saldo piutang, KREDIT ke 1.1.6 → menambah saldo piutang.
+  // DEBIT ke 1.1.6 → menambah piutang, KREDIT ke 1.1.6 → mengurangi piutang.
   const AKUN_PIUTANG_TOKO = '1.1.6'
   const mutasi = useMemo(() => {
     const result: Record<string, Record<number, { jual: number; bayar: number }>> = {}
@@ -1255,8 +1284,8 @@ export function TokoPage() {
 
     const totalJual  = Object.values(bulan).reduce((s, b) => s + b.jual,  0)
     const totalBayar = Object.values(bulan).reduce((s, b) => s + b.bayar, 0)
-    // Saldo Akhir = Saldo Awal − Total Debit (jual) + Total Kredit (bayar)
-    const saldoAkhir   = saldoAwal - totalJual + totalBayar
+    // Saldo Akhir = Saldo Awal + Total Debit (jual) − Total Kredit (bayar)
+    const saldoAkhir   = saldoAwal + totalJual - totalBayar
     const hasActivity  = saldoAwal > 0 || totalJual > 0
 
     return { id: a.id, nama: a.nama, saldoAwal, bulan, totalJual, totalBayar, saldoAkhir, hasActivity }
@@ -1343,8 +1372,8 @@ export function TokoPage() {
       </div>
 
       <div className="bg-blue-50 border border-blue-200 text-blue-700 text-xs rounded-lg px-4 py-2 mb-4">
-        💡 <strong>Rumus:</strong> Saldo Akhir Piutang Toko = Saldo Awal − Total Debit (belanja) + Total Kredit (bayar/angsuran)<br/>
-        Akun <strong>1.1.6 Piutang Toko</strong>: Debet mengurangi saldo · Kredit menambah saldo.<br/>
+        💡 <strong>Rumus:</strong> Saldo Akhir Piutang Toko = Saldo Awal + Total Debit (belanja) − Total Kredit (bayar/angsuran)<br/>
+        Akun <strong>1.1.6 Piutang Toko</strong>: Debet menambah saldo · Kredit mengurangi saldo.<br/>
         Klik <strong>Saldo Awal</strong> untuk edit. Kolom bulan otomatis dari Jurnal Umum.
       </div>
 

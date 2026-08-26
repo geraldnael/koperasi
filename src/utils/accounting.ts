@@ -383,31 +383,44 @@ export function calcSimpananBulanan(jurnal: JurnalEntry[]): MutasiSimpananAnggot
 
 // ─── Dampak jurnal thd SALDO AWAL JASA SIMPANAN SUKARELA per anggota ──────
 // Akun 2.1.12 (Biaya Jasa Simpanan Sukarela yang Masih harus dibayar) dipakai
-// saat jasa yang sudah ditetapkan itu DIBAYARKAN ke anggota:
+// bareng untuk DUA jenis jasa: Jasa Simpanan Sukarela DAN Jasa THT. Dibedakan
+// dari kata "THT" di KETERANGAN jurnal (entry.keterangan, bukan nama baris):
+//   - keterangan mengandung "tht"      → target = jasa_tht
+//   - selain itu (default)             → target = jasa_suk
+// Lalu:
 //   Debet 2.1.12  → jasa yang belum dibayar itu dilunasi → SALDO AWAL berkurang
 //   Kredit 2.1.12 → jasa baru ditetapkan lewat akun ini   → SALDO AWAL bertambah
 // Nama anggota diambil dari kolom "Keterangan" baris jurnal (r.ket), sama
 // seperti pola pencocokan nama di calcSimpananBulanan di atas.
-// Key hasil = nama anggota huruf kecil, value = total perubahan (bisa +/-).
-export function computeJasaSukDelta(entry: { rows: JurnalEntry['rows'] }): Record<string, number> {
-  const delta: Record<string, number> = {}
+// Key hasil = nama anggota huruf kecil, value = {jasa_suk, jasa_tht} (bisa +/-).
+export interface JasaDelta { jasa_suk: number; jasa_tht: number }
+
+export function computeJasaDelta(entry: { keterangan?: string; rows: JurnalEntry['rows'] }): Record<string, JasaDelta> {
+  const isTHT = (entry.keterangan || '').toLowerCase().includes('tht')
+  const field: 'jasa_suk' | 'jasa_tht' = isTHT ? 'jasa_tht' : 'jasa_suk'
+  const delta: Record<string, JasaDelta> = {}
+  const ensure = (nama: string) => {
+    if (!delta[nama]) delta[nama] = { jasa_suk: 0, jasa_tht: 0 }
+    return delta[nama]
+  }
   entry.rows.forEach(r => {
     const nama = (r.ket || '').trim().toLowerCase()
     if (!nama) return
     if (r.kode_d === AKUN_JASA_SUK_YMH_DIBAYAR && r.debet) {
-      delta[nama] = (delta[nama] ?? 0) - r.debet
+      ensure(nama)[field] -= r.debet
     }
     if (r.kode_k === AKUN_JASA_SUK_YMH_DIBAYAR && r.kredit) {
-      delta[nama] = (delta[nama] ?? 0) + r.kredit
+      ensure(nama)[field] += r.kredit
     }
   })
   return delta
 }
 
-// ─── Preview sinkronisasi Saldo Awal Jasa Simpanan Sukarela ────────────────
+// ─── Preview sinkronisasi Saldo Awal Jasa (Simpanan Sukarela & THT) ────────
 // Menyisir SEMUA jurnal yang belum pernah "disinkronkan" (jasaSukSynced
 // bukan true — biasanya jurnal lama dari sebelum fitur otomatis ini ada)
-// dan memakai akun 2.1.12, lalu menghitung dampaknya ke saldo tiap anggota.
+// dan memakai akun 2.1.12, lalu menghitung dampaknya ke saldo tiap anggota
+// (jasa_suk ATAU jasa_tht, tergantung kata "THT" di keterangan jurnal).
 //
 // Entri dipisah jadi dua kelompok:
 //  - matched : nama di baris jurnal cocok dengan anggota yang ada → aman
@@ -415,37 +428,40 @@ export function computeJasaSukDelta(entry: { rows: JurnalEntry['rows'] }): Recor
 //  - unmatched: nama tidak cocok anggota manapun (typo/nama fiktif) →
 //              TIDAK diterapkan, ditampilkan sebagai peringatan supaya
 //              nama-nya diperbaiki dulu di jurnal sebelum bisa disinkronkan
-export interface JasaSukSyncPreviewRow {
+export interface JasaSyncPreviewRow {
   anggotaId: number
   nama: string
   jumlahJurnal: number
-  totalDelta: number
-  saldoSekarang: number
-  saldoBaru: number
+  deltaSuk: number
+  saldoSukSekarang: number
+  saldoSukBaru: number
+  deltaTht: number
+  saldoThtSekarang: number
+  saldoThtBaru: number
 }
 
-export interface JasaSukSyncUnmatched {
+export interface JasaSyncUnmatched {
   entryId: number
   nobukti: string
   tanggal: string
   namaTidakCocok: string
 }
 
-export interface JasaSukSyncPreview {
-  rows: JasaSukSyncPreviewRow[]
-  unmatched: JasaSukSyncUnmatched[]
+export interface JasaSyncPreview {
+  rows: JasaSyncPreviewRow[]
+  unmatched: JasaSyncUnmatched[]
   matchedEntryIds: number[]
 }
 
-export function buildJasaSukSyncPreview(
+export function buildJasaSyncPreview(
   jurnal: JurnalEntry[],
   anggota: Anggota[],
   saldoSimpanan: SaldoSimpanan[],
-): JasaSukSyncPreview {
-  const unmatched: JasaSukSyncUnmatched[] = []
+): JasaSyncPreview {
+  const unmatched: JasaSyncUnmatched[] = []
   const matchedEntryIds: number[] = []
   // akumulasi per anggotaId
-  const acc: Record<number, { totalDelta: number; jumlahJurnal: number }> = {}
+  const acc: Record<number, { deltaSuk: number; deltaTht: number; jumlahJurnal: number }> = {}
 
   jurnal.forEach(entry => {
     if (entry.jasaSukSynced) return // sudah pernah diproses, lewati
@@ -468,29 +484,35 @@ export function buildJasaSukSyncPreview(
       return
     }
 
-    const delta = computeJasaSukDelta(entry)
-    Object.entries(delta).forEach(([namaLower, amount]) => {
-      if (!amount) return
+    const delta = computeJasaDelta(entry)
+    Object.entries(delta).forEach(([namaLower, d]) => {
+      if (!d.jasa_suk && !d.jasa_tht) return
       const a = anggota.find(x => x.nama.trim().toLowerCase() === namaLower)
       if (!a) return // seharusnya tidak terjadi (sudah dicek di atas), jaga-jaga saja
-      if (!acc[a.id]) acc[a.id] = { totalDelta: 0, jumlahJurnal: 0 }
-      acc[a.id].totalDelta += amount
+      if (!acc[a.id]) acc[a.id] = { deltaSuk: 0, deltaTht: 0, jumlahJurnal: 0 }
+      acc[a.id].deltaSuk += d.jasa_suk
+      acc[a.id].deltaTht += d.jasa_tht
       acc[a.id].jumlahJurnal += 1
     })
     matchedEntryIds.push(entry.id)
   })
 
-  const rows: JasaSukSyncPreviewRow[] = Object.entries(acc).map(([idStr, v]) => {
+  const rows: JasaSyncPreviewRow[] = Object.entries(acc).map(([idStr, v]) => {
     const anggotaId = Number(idStr)
     const a = anggota.find(x => x.id === anggotaId)!
-    const saldoSekarang = saldoSimpanan.find(s => s.anggotaId === anggotaId)?.jasa_suk ?? 0
+    const sp = saldoSimpanan.find(s => s.anggotaId === anggotaId)
+    const saldoSukSekarang = sp?.jasa_suk ?? 0
+    const saldoThtSekarang = sp?.jasa_tht ?? 0
     return {
       anggotaId,
       nama: a.nama,
       jumlahJurnal: v.jumlahJurnal,
-      totalDelta: v.totalDelta,
-      saldoSekarang,
-      saldoBaru: saldoSekarang + v.totalDelta,
+      deltaSuk: v.deltaSuk,
+      saldoSukSekarang,
+      saldoSukBaru: saldoSukSekarang + v.deltaSuk,
+      deltaTht: v.deltaTht,
+      saldoThtSekarang,
+      saldoThtBaru: saldoThtSekarang + v.deltaTht,
     }
   }).sort((a, b) => a.nama.localeCompare(b.nama))
 
@@ -546,8 +568,8 @@ export function calcPiutangSPBulanan(
   // Akun yang relevan untuk piutang SP:
   // 1.1.4 = Piutang Simpan Pinjam
   // 4.1.1 = Pendapatan Jasa Pinjaman (kredit = jasa/bunga)
-  // Aturan Saldo Piutang: DEBIT ke 1.1.4 → mengurangi saldo piutang,
-  // KREDIT ke 1.1.4 → menambah saldo piutang.
+  // Aturan Saldo Piutang: DEBIT ke 1.1.4 → menambah piutang/pinjaman anggota,
+  // KREDIT ke 1.1.4 → mengurangi piutang (angsuran/pelunasan).
   const AKUN_PIUTANG  = '1.1.4'
   const AKUN_JASA_SP  = '4.1.1'
 
@@ -564,8 +586,8 @@ export function calcPiutangSPBulanan(
       if (!debet && !kredit) return
 
       // Hanya proses baris yang terkait akun piutang SP atau jasa pinjaman
-      const isDebitPiutang  = r.kode_d === AKUN_PIUTANG && debet > 0   // mengurangi saldo piutang
-      const isKreditPiutang = r.kode_k === AKUN_PIUTANG && kredit > 0  // menambah saldo piutang
+      const isDebitPiutang  = r.kode_d === AKUN_PIUTANG && debet > 0   // menambah piutang
+      const isKreditPiutang = r.kode_k === AKUN_PIUTANG && kredit > 0  // mengurangi piutang
       const isJasa          = r.kode_k === AKUN_JASA_SP && kredit > 0  // bayar jasa/bunga
 
       if (!isDebitPiutang && !isKreditPiutang && !isJasa) return
@@ -574,10 +596,10 @@ export function calcPiutangSPBulanan(
 
       if (isDebitPiutang) {
         result[k].realisasiPokok += debet
-        result[k].bulan[bulan].pokok -= debet
+        result[k].bulan[bulan].pokok += debet
       }
       if (isKreditPiutang) {
-        result[k].bulan[bulan].pokok += kredit
+        result[k].bulan[bulan].pokok -= kredit
       }
       if (isJasa) {
         result[k].bulan[bulan].jasa += kredit

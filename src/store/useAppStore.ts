@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { Identitas, JurnalEntry, ArsipTahun } from '../types'
 import { ANGGOTA_MASTER } from '../data/anggota'
-import { computeSaldos, computeJasaSukDelta } from '../utils/accounting'
+import { computeSaldos, computeJasaDelta } from '../utils/accounting'
 import { COA } from '../utils/coa'
 import {
   dbGetIdentitas, dbSetIdentitas,
@@ -87,8 +87,9 @@ interface AppStore {
   updateJurnal: (id: number, entry: Omit<JurnalEntry, 'id'>) => Promise<void>
   deleteJurnal: (id: number) => Promise<void>
   // Terapkan hasil sinkronisasi "Saldo Jasa dari Jurnal Lama": set saldo
-  // jasa akhir per anggota, lalu tandai jurnal-jurnal terkait sudah synced.
-  applyJasaSukSync: (updates: { anggotaId: number; jasaSukBaru: number }[], entryIds: number[]) => Promise<void>
+  // jasa akhir per anggota (Simpanan Sukarela dan/atau THT), lalu tandai
+  // jurnal-jurnal terkait sudah synced.
+  applyJasaSukSync: (updates: { anggotaId: number; jasaSukBaru?: number; jasaThtBaru?: number }[], entryIds: number[]) => Promise<void>
   updateSaldoSimpanan: (anggotaId: number, data: Partial<Omit<SaldoSimpanan, 'anggotaId'>>) => void
   updatePiutangSP: (anggotaId: number, saldo: number, saldoJasa?: number) => void
   updateSaldoToko: (anggotaId: number, saldo: number) => void
@@ -128,23 +129,27 @@ const defaultAnggota: Anggota[] = ANGGOTA_MASTER.map(a => ({
 const defaultSaldoSimpanan: SaldoSimpanan[] = []
 
 // Terapkan dampak jurnal (akun 2.1.12) ke SALDO AWAL JASA SIMPANAN SUKARELA
-// per anggota. Fungsi murni (tidak menyentuh Supabase langsung) — dipanggil
-// dari addJurnal/updateJurnal/deleteJurnal SETELAH jurnal berhasil
-// disimpan/diubah/dihapus di server, lalu hasilnya disimpan lewat
-// updateSaldoSimpanan (yang sudah otomatis sync ke Supabase).
-function applyJasaSukDelta(
-  delta: Record<string, number>,
+// dan/atau SALDO AWAL JASA THT per anggota (tergantung kata "THT" di
+// keterangan jurnal — lihat computeJasaDelta). Fungsi murni (tidak
+// menyentuh Supabase langsung) — dipanggil dari addJurnal/updateJurnal/
+// deleteJurnal SETELAH jurnal berhasil disimpan/diubah/dihapus di server,
+// lalu hasilnya disimpan lewat updateSaldoSimpanan (yang sudah otomatis
+// sync ke Supabase).
+function applyJasaDelta(
+  delta: Record<string, { jasa_suk: number; jasa_tht: number }>,
   anggotaList: Anggota[],
   saldoList: SaldoSimpanan[],
   updateSaldoSimpanan: (anggotaId: number, data: Partial<SaldoSimpanan>) => void,
 ) {
-  Object.entries(delta).forEach(([namaLower, amount]) => {
-    if (!amount) return
+  Object.entries(delta).forEach(([namaLower, d]) => {
+    if (!d.jasa_suk && !d.jasa_tht) return
     const anggotaMatch = anggotaList.find(a => a.nama.trim().toLowerCase() === namaLower)
     if (!anggotaMatch) return
     const current = saldoList.find(s => s.anggotaId === anggotaMatch.id)
-    const currentJasa = current?.jasa_suk ?? 0
-    updateSaldoSimpanan(anggotaMatch.id, { jasa_suk: currentJasa + amount })
+    const patch: Partial<SaldoSimpanan> = {}
+    if (d.jasa_suk) patch.jasa_suk = (current?.jasa_suk ?? 0) + d.jasa_suk
+    if (d.jasa_tht) patch.jasa_tht = (current?.jasa_tht ?? 0) + d.jasa_tht
+    updateSaldoSimpanan(anggotaMatch.id, patch)
   })
 }
 
@@ -303,7 +308,7 @@ export const useAppStore = create<AppStore>()(
             jurnal: s.jurnal.map(j => j.id === tmpId ? { ...j, id: saved.id, nobukti: saved.nobukti, jasaSukSynced: true } : j),
           }))
           // Update SALDO AWAL JASA SIMPANAN SUKARELA kalau jurnal ini pakai akun 2.1.12
-          applyJasaSukDelta(computeJasaSukDelta(entry), get().anggota, get().saldoSimpanan, get().updateSaldoSimpanan)
+          applyJasaDelta(computeJasaDelta(entry), get().anggota, get().saldoSimpanan, get().updateSaldoSimpanan)
         } catch (e: any) {
           // GAGAL simpan ke server → batalkan entri optimistik supaya tidak
           // "menghilang diam-diam" saat sinkronisasi berikutnya menimpa state lokal
@@ -333,15 +338,18 @@ export const useAppStore = create<AppStore>()(
           // cuma selisihnya). Kalau sudah pernah synced sebelumnya, baru
           // dihitung selisih (dampak baru − dampak lama) supaya tidak dobel.
           if (prev) {
-            const deltaNew = computeJasaSukDelta(entry)
-            const delta: Record<string, number> = deltaNew
+            const deltaNew = computeJasaDelta(entry)
+            const delta: Record<string, { jasa_suk: number; jasa_tht: number }> = deltaNew
             if (prev.jasaSukSynced) {
-              const deltaPrev = computeJasaSukDelta(prev)
+              const deltaPrev = computeJasaDelta(prev)
               for (const k of new Set([...Object.keys(deltaPrev), ...Object.keys(deltaNew)])) {
-                delta[k] = (deltaNew[k] ?? 0) - (deltaPrev[k] ?? 0)
+                delta[k] = {
+                  jasa_suk: (deltaNew[k]?.jasa_suk ?? 0) - (deltaPrev[k]?.jasa_suk ?? 0),
+                  jasa_tht: (deltaNew[k]?.jasa_tht ?? 0) - (deltaPrev[k]?.jasa_tht ?? 0),
+                }
               }
             }
-            applyJasaSukDelta(delta, get().anggota, get().saldoSimpanan, get().updateSaldoSimpanan)
+            applyJasaDelta(delta, get().anggota, get().saldoSimpanan, get().updateSaldoSimpanan)
           }
         } catch (e: any) {
           console.error('Gagal update jurnal ke server:', e)
@@ -363,10 +371,10 @@ export const useAppStore = create<AppStore>()(
           // tidak pernah menambah/mengurangi saldo apa pun, jadi menghapusnya
           // juga tidak boleh mengubah saldo.
           if (prev && prev.jasaSukSynced) {
-            const deltaHapus = computeJasaSukDelta(prev)
-            const reversed: Record<string, number> = {}
-            Object.entries(deltaHapus).forEach(([k, v]) => { reversed[k] = -v })
-            applyJasaSukDelta(reversed, get().anggota, get().saldoSimpanan, get().updateSaldoSimpanan)
+            const deltaHapus = computeJasaDelta(prev)
+            const reversed: Record<string, { jasa_suk: number; jasa_tht: number }> = {}
+            Object.entries(deltaHapus).forEach(([k, v]) => { reversed[k] = { jasa_suk: -v.jasa_suk, jasa_tht: -v.jasa_tht } })
+            applyJasaDelta(reversed, get().anggota, get().saldoSimpanan, get().updateSaldoSimpanan)
           }
         } catch (e) {
           console.error('Gagal hapus jurnal di server:', e)
@@ -377,8 +385,11 @@ export const useAppStore = create<AppStore>()(
 
       applyJasaSukSync: async (updates, entryIds) => {
         // Terapkan saldo jasa akhir per anggota (dihitung di UI dari preview)
-        updates.forEach(({ anggotaId, jasaSukBaru }) => {
-          get().updateSaldoSimpanan(anggotaId, { jasa_suk: jasaSukBaru })
+        updates.forEach(({ anggotaId, jasaSukBaru, jasaThtBaru }) => {
+          const patch: Partial<SaldoSimpanan> = {}
+          if (jasaSukBaru !== undefined) patch.jasa_suk = jasaSukBaru
+          if (jasaThtBaru !== undefined) patch.jasa_tht = jasaThtBaru
+          get().updateSaldoSimpanan(anggotaId, patch)
         })
         // Tandai jurnal-jurnal yang barusan disinkronkan supaya tidak
         // terhitung dobel kalau fitur ini dijalankan lagi nanti
