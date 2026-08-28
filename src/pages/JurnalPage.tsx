@@ -1,5 +1,5 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
-import { Plus, Trash2, Save, RotateCcw, PenLine, Pencil, X, ShieldQuestion, Clock, Check, XCircle } from 'lucide-react'
+import { Plus, Trash2, Save, RotateCcw, PenLine, Pencil, X, ShieldQuestion, Clock, Check, XCircle, SlidersHorizontal } from 'lucide-react'
 import { useAppStore } from '../store/useAppStore'
 import { useAuthStore } from '../store/useAuthStore'
 import { dbPeekNextNobukti } from '../lib/db'
@@ -258,6 +258,97 @@ export default function JurnalPage() {
   const [showApprovalPanel, setShowApprovalPanel] = useState(false)
   const pendingRequests = editRequests.filter(r => r.status === 'pending')
   const allCOA = useMemo(() => mergeCustomCOA(customCOA), [customCOA])
+
+  // ── Filter & sort daftar jurnal ─────────────────────────────────────────
+  // SEBELUMNYA semua entri (1500+) di-sort dan dirender sekaligus tanpa
+  // batas di setiap render, ini yang bikin tab browser "Not Responding"
+  // karena ribuan baris DOM dibuat ulang tiap kali ada state berubah
+  // sedikit saja. Sekarang di-useMemo + pagination + filter, jadi cuma
+  // dihitung ulang saat memang perlu, dan yang dirender cuma 1 halaman.
+  const [searchJurnal, setSearchJurnal] = useState('')
+  const [pageJurnal,   setPageJurnal]   = useState(1)
+  const perPageJurnal = 25
+  const [showFilter,   setShowFilter]   = useState(false)
+
+  type SortField = 'nobukti' | 'tanggal' | 'nominal'
+  const [sortField, setSortField] = useState<SortField>('nobukti')
+  const [sortDir,   setSortDir]   = useState<'asc' | 'desc'>('desc') // default: terbaru/terbesar dulu
+
+  const [filterTglDari,    setFilterTglDari]    = useState('')
+  const [filterTglSampai,  setFilterTglSampai]  = useState('')
+  const [filterAkun,       setFilterAkun]       = useState('')
+  const [filterNominalMin, setFilterNominalMin] = useState('')
+  const [filterNominalMax, setFilterNominalMax] = useState('')
+
+  const filterAktifCount =
+    (filterTglDari ? 1 : 0) + (filterTglSampai ? 1 : 0) + (filterAkun ? 1 : 0) +
+    (filterNominalMin ? 1 : 0) + (filterNominalMax ? 1 : 0)
+
+  const resetFilter = () => {
+    setFilterTglDari(''); setFilterTglSampai(''); setFilterAkun('')
+    setFilterNominalMin(''); setFilterNominalMax('')
+  }
+
+  // Shortcut rentang tanggal cepat
+  const setRangeCepat = (jenis: 'hari' | 'minggu' | 'bulan') => {
+    const now = new Date()
+    const toISO = (d: Date) => d.toISOString().slice(0, 10)
+    if (jenis === 'hari') {
+      setFilterTglDari(toISO(now)); setFilterTglSampai(toISO(now))
+    } else if (jenis === 'minggu') {
+      const awal = new Date(now); awal.setDate(now.getDate() - now.getDay())
+      setFilterTglDari(toISO(awal)); setFilterTglSampai(toISO(now))
+    } else {
+      const awal = new Date(now.getFullYear(), now.getMonth(), 1)
+      setFilterTglDari(toISO(awal)); setFilterTglSampai(toISO(now))
+    }
+    setPageJurnal(1)
+  }
+
+  const jurnalFiltered = useMemo(() => {
+    let list = jurnal
+
+    const q = searchJurnal.trim().toLowerCase()
+    if (q) {
+      list = list.filter(j =>
+        j.nobukti.toLowerCase().includes(q) ||
+        j.keterangan.toLowerCase().includes(q) ||
+        j.tanggal.includes(q) ||
+        j.rows.some(r => (r.ket || '').toLowerCase().includes(q) || r.kode_d.includes(q) || r.kode_k.includes(q))
+      )
+    }
+    if (filterTglDari)   list = list.filter(j => j.tanggal >= filterTglDari)
+    if (filterTglSampai) list = list.filter(j => j.tanggal <= filterTglSampai)
+    if (filterAkun)      list = list.filter(j => j.rows.some(r => r.kode_d === filterAkun || r.kode_k === filterAkun))
+    const min = parseFloat(filterNominalMin)
+    const max = parseFloat(filterNominalMax)
+    if (!isNaN(min)) list = list.filter(j => j.total >= min)
+    if (!isNaN(max)) list = list.filter(j => j.total <= max)
+
+    return list
+  }, [jurnal, searchJurnal, filterTglDari, filterTglSampai, filterAkun, filterNominalMin, filterNominalMax])
+
+  const jurnalSorted = useMemo(() => {
+    const arr = [...jurnalFiltered]
+    arr.sort((a, b) => {
+      let cmp = 0
+      if (sortField === 'tanggal')      cmp = a.tanggal.localeCompare(b.tanggal)
+      else if (sortField === 'nominal') cmp = a.total - b.total
+      else                              cmp = parseNoBuktiNum(a.nobukti) - parseNoBuktiNum(b.nobukti)
+      if (cmp === 0) cmp = a.id - b.id
+      return sortDir === 'asc' ? cmp : -cmp
+    })
+    return arr
+  }, [jurnalFiltered, sortField, sortDir])
+
+  const totalPageJurnal = Math.max(1, Math.ceil(jurnalSorted.length / perPageJurnal))
+  const jurnalPaginated = useMemo(() =>
+    jurnalSorted.slice((pageJurnal - 1) * perPageJurnal, pageJurnal * perPageJurnal),
+    [jurnalSorted, pageJurnal])
+
+  useEffect(() => {
+    if (pageJurnal > totalPageJurnal) setPageJurnal(totalPageJurnal)
+  }, [totalPageJurnal, pageJurnal])
 
   const anggotaNama = useMemo(() => anggota.map(a => a.nama), [anggota])
 
@@ -545,13 +636,126 @@ export default function JurnalPage() {
 
       {/* ── Daftar jurnal tersimpan ── */}
       <div className="card overflow-hidden no-print">
-        <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
-          <span className="text-sm font-semibold text-slate-700">Daftar Jurnal Tersimpan</span>
-          <span className="badge badge-blue">{jurnal.length} entri</span>
+        <div className="px-4 py-3 border-b border-slate-100 flex flex-wrap items-center gap-3 justify-between">
+          <div className="flex items-center gap-3">
+            <span className="text-sm font-semibold text-slate-700">Daftar Jurnal Tersimpan</span>
+            <span className="badge badge-blue">{jurnal.length} entri</span>
+            {jurnalSorted.length !== jurnal.length && (
+              <span className="text-xs text-slate-400">({jurnalSorted.length} cocok filter)</span>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <input
+              className="input max-w-xs"
+              placeholder="Cari no. bukti / keterangan / nama / kode akun..."
+              value={searchJurnal}
+              onChange={e => { setSearchJurnal(e.target.value); setPageJurnal(1) }}
+            />
+            <button
+              className={`btn btn-sm ${showFilter || filterAktifCount > 0 ? 'border-blue-400 text-blue-600 bg-blue-50' : ''}`}
+              onClick={() => setShowFilter(v => !v)}>
+              <SlidersHorizontal size={14} /> Filter
+              {filterAktifCount > 0 && (
+                <span className="ml-1 bg-blue-600 text-white rounded-full text-[10px] w-4 h-4 inline-flex items-center justify-center">
+                  {filterAktifCount}
+                </span>
+              )}
+            </button>
+          </div>
         </div>
+
+        {/* ── Panel Filter Lanjutan ── */}
+        {showFilter && (
+          <div className="px-4 py-4 border-b border-slate-100 bg-slate-50/60 space-y-4">
+            {/* Urutkan */}
+            <div>
+              <label className="text-xs font-semibold text-slate-500 block mb-1.5">Urutkan berdasarkan</label>
+              <div className="flex flex-wrap gap-2">
+                {([
+                  { field: 'nobukti' as const, label: 'No. Bukti' },
+                  { field: 'tanggal' as const, label: 'Tanggal' },
+                  { field: 'nominal' as const, label: 'Nominal' },
+                ]).map(opt => (
+                  <button
+                    key={opt.field}
+                    className={`btn btn-sm ${sortField === opt.field ? 'border-blue-400 text-blue-600 bg-blue-50' : ''}`}
+                    onClick={() => {
+                      if (sortField === opt.field) {
+                        setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+                      } else {
+                        setSortField(opt.field)
+                        setSortDir('desc')
+                      }
+                      setPageJurnal(1)
+                    }}>
+                    {opt.label}
+                    {sortField === opt.field && (sortDir === 'desc' ? ' ↓' : ' ↑')}
+                  </button>
+                ))}
+                <span className="text-xs text-slate-400 self-center ml-1">
+                  {sortField === 'tanggal'
+                    ? (sortDir === 'desc' ? 'Terbaru → terlama' : 'Terlama → terbaru')
+                    : sortField === 'nominal'
+                    ? (sortDir === 'desc' ? 'Terbesar → terkecil' : 'Terkecil → terbesar')
+                    : (sortDir === 'desc' ? 'Nomor terbesar → terkecil' : 'Nomor terkecil → terbesar')}
+                </span>
+              </div>
+            </div>
+
+            {/* Rentang tanggal */}
+            <div>
+              <label className="text-xs font-semibold text-slate-500 block mb-1.5">Rentang tanggal</label>
+              <div className="flex flex-wrap items-center gap-2">
+                <input type="date" className="input w-auto" value={filterTglDari}
+                  onChange={e => { setFilterTglDari(e.target.value); setPageJurnal(1) }} />
+                <span className="text-xs text-slate-400">s/d</span>
+                <input type="date" className="input w-auto" value={filterTglSampai}
+                  onChange={e => { setFilterTglSampai(e.target.value); setPageJurnal(1) }} />
+                <div className="flex gap-1.5 ml-1">
+                  <button className="btn btn-sm" onClick={() => setRangeCepat('hari')}>Hari ini</button>
+                  <button className="btn btn-sm" onClick={() => setRangeCepat('minggu')}>Minggu ini</button>
+                  <button className="btn btn-sm" onClick={() => setRangeCepat('bulan')}>Bulan ini</button>
+                </div>
+              </div>
+            </div>
+
+            {/* Akun & rentang nominal */}
+            <div className="flex flex-wrap gap-4">
+              <div>
+                <label className="text-xs font-semibold text-slate-500 block mb-1.5">Akun (Debet atau Kredit)</label>
+                <select className="input w-64" value={filterAkun}
+                  onChange={e => { setFilterAkun(e.target.value); setPageJurnal(1) }}>
+                  <option value="">Semua akun</option>
+                  {allCOA.map(a => (
+                    <option key={a.kode} value={a.kode}>{a.kode} — {a.nama}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-slate-500 block mb-1.5">Rentang nominal (Rp)</label>
+                <div className="flex items-center gap-2">
+                  <input type="number" className="input w-32" placeholder="Dari" value={filterNominalMin}
+                    onChange={e => { setFilterNominalMin(e.target.value); setPageJurnal(1) }} />
+                  <span className="text-xs text-slate-400">s/d</span>
+                  <input type="number" className="input w-32" placeholder="Sampai" value={filterNominalMax}
+                    onChange={e => { setFilterNominalMax(e.target.value); setPageJurnal(1) }} />
+                </div>
+              </div>
+            </div>
+
+            {filterAktifCount > 0 && (
+              <button className="btn btn-sm text-red-500 border-red-200 hover:bg-red-50"
+                onClick={() => { resetFilter(); setPageJurnal(1) }}>
+                <X size={13} /> Reset filter ({filterAktifCount})
+              </button>
+            )}
+          </div>
+        )}
 
         {jurnal.length === 0 ? (
           <EmptyState icon={<PenLine size={32} />} message="Belum ada jurnal. Tambah transaksi di atas." />
+        ) : jurnalSorted.length === 0 ? (
+          <EmptyState icon={<PenLine size={32} />} message="Tidak ada jurnal yang cocok dengan pencarian/filter ini." />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full">
@@ -565,14 +769,7 @@ export default function JurnalPage() {
                 </tr>
               </thead>
               <tbody>
-                {[...jurnal].sort((a, b) => {
-                  // Urutkan berdasarkan nomor JU tertinggi dulu — jurnal
-                  // terbaru (nomor tertinggi) selalu tampil paling atas,
-                  // tidak lagi ikut urutan id/tanggal yang bisa kelihatan acak.
-                  const numDiff = parseNoBuktiNum(b.nobukti) - parseNoBuktiNum(a.nobukti)
-                  if (numDiff !== 0) return numDiff
-                  return b.id - a.id
-                }).map(j => {
+                {jurnalPaginated.map(j => {
                   const td       = j.rows.reduce((a, r) => a + (r.debet || 0), 0)
                   const isEdit   = j.id === editId
                   return (
@@ -669,6 +866,24 @@ export default function JurnalPage() {
                 })}
               </tbody>
             </table>
+          </div>
+        )}
+        {jurnalSorted.length > 0 && (
+          <div className="px-4 py-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+            <span>
+              Menampilkan {(pageJurnal - 1) * perPageJurnal + 1}–{Math.min(pageJurnal * perPageJurnal, jurnalSorted.length)} dari {jurnalSorted.length} entri
+            </span>
+            <div className="flex items-center gap-2">
+              <button className="btn btn-sm" disabled={pageJurnal <= 1}
+                onClick={() => setPageJurnal(p => Math.max(1, p - 1))}>
+                ‹ Sebelumnya
+              </button>
+              <span>Hal {pageJurnal} / {totalPageJurnal}</span>
+              <button className="btn btn-sm" disabled={pageJurnal >= totalPageJurnal}
+                onClick={() => setPageJurnal(p => Math.min(totalPageJurnal, p + 1))}>
+                Berikutnya ›
+              </button>
+            </div>
           </div>
         )}
       </div>
