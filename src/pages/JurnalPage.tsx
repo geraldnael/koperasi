@@ -1,10 +1,11 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
-import { Plus, Trash2, Save, RotateCcw, PenLine, Pencil, X, ShieldQuestion, Clock, Check, XCircle, SlidersHorizontal } from 'lucide-react'
+import { Plus, Trash2, Save, RotateCcw, PenLine, Pencil, X, ShieldQuestion, Clock, Check, XCircle, SlidersHorizontal, Receipt } from 'lucide-react'
 import { useAppStore } from '../store/useAppStore'
 import { useAuthStore } from '../store/useAuthStore'
 import { dbPeekNextNobukti } from '../lib/db'
 import { getAkunNama, mergeCustomCOA } from '../utils/coa'
 import { fmt } from '../utils/accounting'
+import { isKasBankEntry, printKwitansi } from '../utils/kwitansiHelper'
 import { PageHeader, BalanceAlert, EmptyState } from '../components/ui'
 import { printElement } from '../utils/printHelper'
 import { exportJurnal } from '../utils/exportExcel'
@@ -783,6 +784,15 @@ export default function JurnalPage() {
                         <td className="td-num text-blue-700 font-bold">{fmt(td)}</td>
                         <td className="td text-center">
                           <div className="flex gap-1 justify-center">
+                            {/* Cetak Kwitansi: muncul kalau jurnal ini menyentuh akun Kas/Bank */}
+                            {isKasBankEntry(j) && (
+                              <button
+                                className="btn btn-sm p-1.5 text-emerald-600 border-emerald-200 hover:bg-emerald-50"
+                                onClick={() => printKwitansi(j, identitas, allCOA)}
+                                title="Cetak kwitansi / bukti penerimaan-pengeluaran">
+                                <Receipt size={13} />
+                              </button>
+                            )}
                             {/* Tombol Edit: perilaku beda per role */}
                             {isBendahara ? (
                               <button
