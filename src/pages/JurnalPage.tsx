@@ -4,7 +4,7 @@ import { useAppStore } from '../store/useAppStore'
 import { useAuthStore } from '../store/useAuthStore'
 import { dbPeekNextNobukti } from '../lib/db'
 import { getAkunNama, mergeCustomCOA } from '../utils/coa'
-import { fmt } from '../utils/accounting'
+import { fmt, AKUN_KAS_BANK } from '../utils/accounting'
 import { isKasBankEntry, printKwitansi } from '../utils/kwitansiHelper'
 import { PageHeader, BalanceAlert, EmptyState } from '../components/ui'
 import { printElement } from '../utils/printHelper'
@@ -23,7 +23,7 @@ function rowTag(r: JurnalBaris): 'simpanan' | 'piutang' | null {
 }
 
 const newRow = (): JurnalBaris => ({
-  id: crypto.randomUUID(), ket: '', kode_d: '', debet: 0, kode_k: '', kredit: 0,
+  id: crypto.randomUUID(), ket: '', kode_d: '', debet: 0, kode_k: '', kredit: 0, pihak: '',
 })
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -152,7 +152,15 @@ function JurnalRow({
     }
   }
 
+  // Baris ini menyentuh akun Kas atau Bank? → tampilkan input "Pihak" khusus
+  // untuk kwitansi, terpisah dari Nama Anggota di atas.
+  const isKasBank = AKUN_KAS_BANK.includes(row.kode_d) || AKUN_KAS_BANK.includes(row.kode_k)
+  const arahKasBank: 'MASUK' | 'KELUAR' | null =
+    AKUN_KAS_BANK.includes(row.kode_d) ? 'MASUK' :
+    AKUN_KAS_BANK.includes(row.kode_k) ? 'KELUAR' : null
+
   return (
+    <div>
     <div className={`grid grid-cols-1 md:grid-cols-[220px_1fr_130px_1fr_130px_36px] gap-2
                      items-end rounded-lg px-2 py-2 border transition-colors
                      ${tag === 'simpanan' ? 'bg-emerald-50 border-emerald-200' :
@@ -237,6 +245,29 @@ function JurnalRow({
         onClick={() => onRemove(row.id)} disabled={!canRemove}>
         <Trash2 size={14} />
       </button>
+    </div>
+
+    {/* Input Pihak — khusus muncul kalau baris ini pakai akun Kas/Bank.
+        TERPISAH dari Nama Anggota: bebas diisi nama vendor/toko/siapa pun
+        (tidak perlu terdaftar sebagai anggota), dipakai sebagai "Telah
+        dibayarkan kepada" / "Sudah terima dari" di kwitansi cetak. */}
+    {isKasBank && (
+      <div className="mt-1.5 px-2">
+        <label className="text-[10px] font-semibold text-amber-700 flex items-center gap-1 mb-1">
+          🧾 {arahKasBank === 'MASUK' ? 'Sudah terima dari' : 'Dibayarkan kepada'} (untuk kwitansi)
+        </label>
+        <input
+          type="text"
+          className="input text-xs w-full max-w-md border-amber-300 focus:border-amber-500 bg-amber-50/50"
+          placeholder={arahKasBank === 'MASUK' ? 'Nama penyetor / sumber uang masuk...' : 'Nama penerima / toko / vendor...'}
+          value={row.pihak ?? ''}
+          onChange={e => onChange(row.id, 'pihak', e.target.value)}
+        />
+        <p className="text-[9px] text-slate-400 mt-0.5">
+          Kosongkan kalau mau pakai Nama Anggota / Keterangan seperti biasa di kwitansi.
+        </p>
+      </div>
+    )}
     </div>
   )
 }
@@ -844,6 +875,11 @@ export default function JurnalPage() {
                               {r.ket && (
                                 <span className="mr-2 font-semibold text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded">
                                   {r.ket}
+                                </span>
+                              )}
+                              {r.pihak && (
+                                <span className="mr-2 font-semibold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded" title="Pihak untuk kwitansi">
+                                  🧾 {r.pihak}
                                 </span>
                               )}
                               {r.kode_d && (

@@ -31,6 +31,11 @@ export interface JurnalBaris {
   debet: number
   kode_k: string
   kredit: number
+  // Nama pihak penerima/pemberi untuk keperluan kwitansi Kas/Bank — TERPISAH
+  // dari `ket` (Nama Anggota, dipakai untuk buku pembantu simpanan/piutang).
+  // `ket` harus persis nama anggota terdaftar; `pihak` bebas teks apa saja
+  // (vendor, toko, pihak luar, dll) karena tidak divalidasi ke daftar anggota.
+  pihak?: string
 }
 
 export interface JurnalEntry {

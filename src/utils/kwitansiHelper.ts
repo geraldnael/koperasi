@@ -64,7 +64,8 @@ export function isKasBankEntry(entry: JurnalEntry): boolean {
 function barisKasBankDariEntry(entry: JurnalEntry): BarisKasBank[] {
   const hasil: BarisKasBank[] = []
   entry.rows.forEach(r => {
-    const nama = (r.ket || '').trim() || entry.keterangan || '-'
+    // Prioritas nama untuk kwitansi: Pihak (khusus kas/bank) → Nama Anggota → Keterangan jurnal
+    const nama = (r.pihak || '').trim() || (r.ket || '').trim() || entry.keterangan || '-'
     if (AKUN_KAS_BANK.includes(r.kode_d) && r.debet > 0) {
       hasil.push({ nama, arah: 'MASUK', jumlah: r.debet, akunKasBank: r.kode_d, akunLawan: r.kode_k })
     }
