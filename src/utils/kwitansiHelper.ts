@@ -44,8 +44,12 @@ export function terbilangRupiah(num: number): string {
 }
 
 // ─── Deteksi & bangun daftar baris kas/bank dari satu entri jurnal ─────────
-interface BarisKasBank {
+// `rowId` dipakai untuk menyimpan balik nilai "nama" (Pihak) ke baris jurnal
+// aslinya kalau user memilih opsi "simpan juga ke jurnal" di modal edit.
+export interface BarisKasBank {
+  rowId: string
   nama: string
+  keterangan: string
   arah: 'MASUK' | 'KELUAR'
   jumlah: number
   akunKasBank: string
@@ -61,30 +65,34 @@ export function isKasBankEntry(entry: JurnalEntry): boolean {
   return entry.rows.some(r => AKUN_KAS_BANK.includes(r.kode_d) || AKUN_KAS_BANK.includes(r.kode_k))
 }
 
-function barisKasBankDariEntry(entry: JurnalEntry): BarisKasBank[] {
+/**
+ * Hitung daftar baris kas/bank dari satu entri jurnal (nama, arah, jumlah,
+ * dsb) — dipakai untuk MENGISI AWAL modal edit kwitansi sebelum dicetak.
+ * Nilai di sini masih boleh diubah user di modal sebelum benar-benar
+ * dicetak lewat renderKwitansi().
+ */
+export function getKasBankRows(entry: JurnalEntry): BarisKasBank[] {
   const hasil: BarisKasBank[] = []
   entry.rows.forEach(r => {
     // Prioritas nama untuk kwitansi: Pihak (khusus kas/bank) → Nama Anggota → Keterangan jurnal
     const nama = (r.pihak || '').trim() || (r.ket || '').trim() || entry.keterangan || '-'
     if (AKUN_KAS_BANK.includes(r.kode_d) && r.debet > 0) {
-      hasil.push({ nama, arah: 'MASUK', jumlah: r.debet, akunKasBank: r.kode_d, akunLawan: r.kode_k })
+      hasil.push({ rowId: r.id, nama, keterangan: entry.keterangan || '', arah: 'MASUK', jumlah: r.debet, akunKasBank: r.kode_d, akunLawan: r.kode_k })
     }
     if (AKUN_KAS_BANK.includes(r.kode_k) && r.kredit > 0) {
-      hasil.push({ nama, arah: 'KELUAR', jumlah: r.kredit, akunKasBank: r.kode_k, akunLawan: r.kode_d })
+      hasil.push({ rowId: r.id, nama, keterangan: entry.keterangan || '', arah: 'KELUAR', jumlah: r.kredit, akunKasBank: r.kode_k, akunLawan: r.kode_d })
     }
   })
   return hasil
 }
 
 /**
- * Cetak kwitansi / bukti penerimaan-pengeluaran kas & bank untuk satu entri
- * jurnal. Hanya berlaku kalau entri memang menyentuh akun Kas (1.1.1) atau
- * Bank (1.1.2) — cek dulu dengan isKasBankEntry() sebelum memanggil ini.
- * Kalau satu entri punya beberapa baris kas/bank (jarang terjadi), akan
- * dicetak beberapa kwitansi sekaligus (satu per halaman).
+ * Render & cetak kwitansi dari daftar baris yang SUDAH DIISI/DIEDIT (lewat
+ * modal di JurnalPage). Fungsi ini murni render — tidak menghitung ulang
+ * dari entry, supaya perubahan yang diketik user di modal (nama/keterangan)
+ * benar-benar yang tercetak, bukan nilai asli dari jurnal.
  */
-export function printKwitansi(entry: JurnalEntry, identitas: Identitas, allCOA: Akun[]) {
-  const daftar = barisKasBankDariEntry(entry)
+export function renderKwitansi(daftar: BarisKasBank[], entry: JurnalEntry, identitas: Identitas, allCOA: Akun[]) {
   if (daftar.length === 0) {
     alert('Jurnal ini tidak menyentuh akun Kas atau Bank.')
     return
@@ -127,7 +135,7 @@ export function printKwitansi(entry: JurnalEntry, identitas: Identitas, allCOA: 
         </tr>
         <tr>
           <td class="lbl">Untuk pembayaran</td>
-          <td>: ${entry.keterangan || '-'}</td>
+          <td>: ${b.keterangan || '-'}</td>
         </tr>
       </table>
 
@@ -198,4 +206,13 @@ export function printKwitansi(entry: JurnalEntry, identitas: Identitas, allCOA: 
   win.document.close()
   win.focus()
   setTimeout(() => { win.print(); win.close() }, 900)
+}
+
+/**
+ * Cetak langsung tanpa modal edit — dipakai kalau ada pemanggil lain yang
+ * tidak perlu alur edit-dulu (jarang dipakai; JurnalPage sekarang pakai
+ * getKasBankRows() + modal + renderKwitansi() supaya bisa diedit dulu).
+ */
+export function printKwitansi(entry: JurnalEntry, identitas: Identitas, allCOA: Akun[]) {
+  renderKwitansi(getKasBankRows(entry), entry, identitas, allCOA)
 }

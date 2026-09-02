@@ -5,7 +5,8 @@ import { useAuthStore } from '../store/useAuthStore'
 import { dbPeekNextNobukti } from '../lib/db'
 import { getAkunNama, mergeCustomCOA } from '../utils/coa'
 import { fmt, AKUN_KAS_BANK } from '../utils/accounting'
-import { isKasBankEntry, printKwitansi } from '../utils/kwitansiHelper'
+import { isKasBankEntry, getKasBankRows, renderKwitansi } from '../utils/kwitansiHelper'
+import type { BarisKasBank } from '../utils/kwitansiHelper'
 import { PageHeader, BalanceAlert, EmptyState } from '../components/ui'
 import { printElement } from '../utils/printHelper'
 import { exportJurnal } from '../utils/exportExcel'
@@ -311,6 +312,13 @@ export default function JurnalPage() {
   const [filterAkun,       setFilterAkun]       = useState('')
   const [filterNominalMin, setFilterNominalMin] = useState('')
   const [filterNominalMax, setFilterNominalMax] = useState('')
+
+  // Modal edit kwitansi sebelum cetak — muncul saat tombol 🧾 diklik,
+  // supaya nama penerima/keterangan bisa dikoreksi dulu (khususnya untuk
+  // jurnal lama yang belum sempat diisi field Pihak).
+  const [kwitansiModal, setKwitansiModal] = useState<{ entry: JurnalEntry; rows: BarisKasBank[] } | null>(null)
+  const [simpanKeJurnal, setSimpanKeJurnal] = useState(true)
+  const [savingKwitansi, setSavingKwitansi] = useState(false)
 
   const filterAktifCount =
     (filterTglDari ? 1 : 0) + (filterTglSampai ? 1 : 0) + (filterAkun ? 1 : 0) +
@@ -819,7 +827,7 @@ export default function JurnalPage() {
                             {isKasBankEntry(j) && (
                               <button
                                 className="btn btn-sm p-1.5 text-emerald-600 border-emerald-200 hover:bg-emerald-50"
-                                onClick={() => printKwitansi(j, identitas, allCOA)}
+                                onClick={() => { setKwitansiModal({ entry: j, rows: getKasBankRows(j) }); setSimpanKeJurnal(true) }}
                                 title="Cetak kwitansi / bukti penerimaan-pengeluaran">
                                 <Receipt size={13} />
                               </button>
@@ -933,6 +941,103 @@ export default function JurnalPage() {
           </div>
         )}
       </div>
+
+      {/* ── Modal edit kwitansi sebelum cetak ── */}
+      {kwitansiModal && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-xl w-full max-h-[85vh] overflow-y-auto">
+            <div className="p-4 border-b border-slate-200">
+              <h3 className="font-bold text-slate-800">Cetak Kwitansi — {kwitansiModal.entry.nobukti}</h3>
+              <p className="text-xs text-slate-500 mt-1">
+                Koreksi dulu nama & keterangan kalau perlu, sebelum dicetak. Perubahan di sini hanya
+                mempengaruhi tampilan kwitansi — bukan data jurnalnya, kecuali opsi "simpan" di bawah dicentang.
+              </p>
+            </div>
+
+            <div className="p-4 space-y-4">
+              {kwitansiModal.rows.map((b, idx) => (
+                <div key={b.rowId + idx} className={`rounded-lg border p-3 space-y-2 ${b.arah === 'MASUK' ? 'border-emerald-200 bg-emerald-50/40' : 'border-red-200 bg-red-50/40'}`}>
+                  <div className="flex items-center justify-between">
+                    <span className={`text-xs font-bold px-2 py-0.5 rounded ${b.arah === 'MASUK' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
+                      {b.arah === 'MASUK' ? 'BUKTI PENERIMAAN' : 'BUKTI PENGELUARAN'}
+                    </span>
+                    <span className="text-xs font-mono text-slate-500">Rp {fmt(b.jumlah)}</span>
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-semibold text-slate-600 block mb-1">
+                      {b.arah === 'MASUK' ? 'Sudah terima dari' : 'Telah dibayarkan kepada'}
+                    </label>
+                    <input
+                      className="input text-sm w-full"
+                      value={b.nama}
+                      onChange={e => setKwitansiModal(m => m && ({
+                        ...m,
+                        rows: m.rows.map((r, i) => i === idx ? { ...r, nama: e.target.value } : r),
+                      }))}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-semibold text-slate-600 block mb-1">Untuk pembayaran</label>
+                    <input
+                      className="input text-sm w-full"
+                      value={b.keterangan}
+                      onChange={e => setKwitansiModal(m => m && ({
+                        ...m,
+                        rows: m.rows.map((r, i) => i === idx ? { ...r, keterangan: e.target.value } : r),
+                      }))}
+                    />
+                  </div>
+                </div>
+              ))}
+
+              <label className="flex items-start gap-2 text-xs text-slate-600 cursor-pointer">
+                <input type="checkbox" className="mt-0.5" checked={simpanKeJurnal}
+                  onChange={e => setSimpanKeJurnal(e.target.checked)} />
+                <span>
+                  Simpan juga perubahan nama di atas ke jurnal ini (field <strong>Pihak</strong>) — supaya
+                  lain kali cetak kwitansi jurnal ini, tidak perlu ketik ulang.
+                </span>
+              </label>
+            </div>
+
+            <div className="p-4 border-t border-slate-200 flex justify-end gap-2">
+              <button className="btn btn-sm" onClick={() => setKwitansiModal(null)} disabled={savingKwitansi}>
+                Batal
+              </button>
+              <button
+                className="btn btn-sm bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-700"
+                disabled={savingKwitansi}
+                onClick={async () => {
+                  const { entry, rows } = kwitansiModal
+                  if (simpanKeJurnal) {
+                    setSavingKwitansi(true)
+                    try {
+                      const rowsBaru = entry.rows.map(r => {
+                        const match = rows.find(b => b.rowId === r.id)
+                        return match ? { ...r, pihak: match.nama } : r
+                      })
+                      // Kalau cuma 1 baris kas/bank, keterangan jurnal ikut diperbarui juga
+                      const keteranganBaru = rows.length === 1 ? rows[0].keterangan : entry.keterangan
+                      await updateJurnal(entry.id, { ...entry, rows: rowsBaru, keterangan: keteranganBaru })
+                    } finally {
+                      setSavingKwitansi(false)
+                    }
+                  }
+                  renderKwitansi(rows, entry, identitas, allCOA)
+                  setKwitansiModal(null)
+                }}>
+                {savingKwitansi ? 'Menyimpan…' : (
+                  <>
+                    <Receipt size={13} /> Cetak Kwitansi
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
