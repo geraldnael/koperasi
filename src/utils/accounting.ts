@@ -365,14 +365,20 @@ export function calcSimpananBulanan(jurnal: JurnalEntry[]): MutasiSimpananAnggot
       const jenisDariKredit = AKUN_SIMPANAN_MAP[r.kode_k]
       const jenisDariDebet  = AKUN_SIMPANAN_MAP[r.kode_d]
 
-      // Proses sisi kredit dan debet SECARA TERPISAH berdasarkan akun yang cocok
-      // Kredit ke akun simpanan → setoran (simpanan BERTAMBAH)
+      // Proses sisi kredit dan debet SECARA TERPISAH berdasarkan akun yang cocok.
+      // Aturan umum (akun Kewajiban/Ekuitas/Pendapatan — K-normal):
+      //   Kredit → setoran (BERTAMBAH), Debet → penarikan (BERKURANG)
+      // KHUSUS akun 5.1.2 Beban Jasa Simpanan Sukarela (D-normal, jenis
+      // 'jasa_suk'), arahnya DIBALIK sesuai pencatatan koperasi ini:
+      //   Debet 5.1.2 → kolom bulanan jasa BERTAMBAH
+      //   Kredit 5.1.2 → kolom bulanan jasa BERKURANG
       if (jenisDariKredit && kredit > 0) {
-        mut[jenisDariKredit] += kredit
+        if (jenisDariKredit === 'jasa_suk') mut[jenisDariKredit] -= kredit
+        else                                mut[jenisDariKredit] += kredit
       }
-      // Debet dari akun simpanan → penarikan (simpanan BERKURANG)
       if (jenisDariDebet && debet > 0) {
-        mut[jenisDariDebet] -= debet
+        if (jenisDariDebet === 'jasa_suk') mut[jenisDariDebet] += debet
+        else                               mut[jenisDariDebet] -= debet
       }
       // Jika tidak ada sisi yang cocok dengan AKUN_SIMPANAN_MAP, skip baris ini
     })
